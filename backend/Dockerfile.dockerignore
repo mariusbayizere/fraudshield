@@ -1,0 +1,11 @@
+# Ignore file for backend/Dockerfile, whose context is the repository root: everything is
+# excluded except what the backend build reads.
+**
+!backend/
+!contracts/openapi/
+!contracts/proto/
+!contracts/kafka/schemas/
+!dataset/generator/params/countries/
+backend/**/target/
+backend/**/.idea/
+backend/**/*.iml

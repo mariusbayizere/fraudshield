@@ -1,0 +1,223 @@
+# Security scan (SRS 8.1 stage 4, build prompt D-28, M9 gate): Trivy on dependencies and on
+# configuration, and an OWASP ZAP API scan, driven by the OpenAPI contract, against the compose
+# stack. Gitleaks already runs on every push in ci.yml (job "gitleaks") with the same pinned
+# launcher; it is not repeated here.
+#
+# Gates: Trivy fails on any HIGH or CRITICAL vulnerability that has a fix (--ignore-unfixed; the
+# M9 gate is "0 high/critical unfixed"). ZAP fails on any High-risk alert (ZAP's top risk level;
+# the gate's "0 critical"), and when it reached fewer URLs than the contract has paths.
+#
+# The ZAP job needs the API in the compose stack. Until a `fraudshield-api` service exists there,
+# the job is SKIPPED (shown as skipped, never as passed) and the `zap-target` job says why.
+name: security
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trivy-dependencies:
+    name: trivy (dependency vulnerabilities, HIGH/CRITICAL with a fix)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A separate step, so a registry outage or rate limit reads as a download failure rather than
+      # as findings. Trivy already falls back from mirror.gcr.io to ghcr.io.
+      - name: Download the vulnerability database (3 attempts)
+        run: |
+          for attempt in 1 2 3; do
+            infrastructure/bin/trivy fs --download-db-only --no-progress && exit 0
+            echo "::warning::trivy DB download attempt $attempt failed"
+            sleep $((attempt * 20))
+          done
+          exit 1
+      # Trivy resolves Maven parent POMs one request at a time and Maven Central answers 429 to
+      # that pattern; resolving through Maven first (cached by setup-java) gives Trivy a local
+      # ~/.m2 to read instead.
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21.0.12"
+          cache: maven
+      - name: Resolve Maven dependencies into ~/.m2
+        working-directory: backend
+        run: ./mvnw -B -ntp -q dependency:go-offline
+      - name: Scan lockfiles (uv.lock, pnpm-lock.yaml, Maven poms)
+        run: |
+          infrastructure/bin/trivy fs --skip-db-update --no-progress --scanners vuln --format json \
+            --output trivy-dependencies.json .
+          infrastructure/bin/trivy convert --scanners vuln --format table trivy-dependencies.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Gate on HIGH/CRITICAL vulnerabilities that have a fix
+        run: |
+          gated=$(jq '[.Results[]? | .Vulnerabilities[]?
+                       | select((.Severity == "HIGH" or .Severity == "CRITICAL")
+                                and (.FixedVersion // "") != "")] | length' trivy-dependencies.json)
+          echo "HIGH/CRITICAL with a fix: $gated" | tee -a "$GITHUB_STEP_SUMMARY"
+          jq -r '.Results[]? | .Target as $t | .Vulnerabilities[]?
+                 | select((.Severity == "HIGH" or .Severity == "CRITICAL") and (.FixedVersion // "") != "")
+                 | "\($t)\t\(.PkgName) \(.InstalledVersion) -> \(.FixedVersion)\t\(.VulnerabilityID)"' \
+            trivy-dependencies.json | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$gated" -eq 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: trivy-dependencies
+          path: trivy-dependencies.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  trivy-configuration:
+    name: trivy (misconfiguration in Kubernetes manifests and Dockerfiles)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Rendered overlays are what gets applied; the raw base alone would miss overlay patches.
+      - name: Render the Kubernetes overlays
+        run: |
+          mkdir -p build/k8s
+          for overlay in infrastructure/k8s/overlays/*/; do
+            infrastructure/bin/kustomize build "$overlay" >"build/k8s/$(basename "$overlay").yaml"
+          done
+      - name: Scan configuration
+        run: |
+          infrastructure/bin/trivy config --severity HIGH,CRITICAL --exit-code 1 --format table .
+
+  zap-target:
+    name: zap (is there an API to scan?)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      present: ${{ steps.detect.outputs.present }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: detect
+        run: |
+          if grep -qE '^  fraudshield-api:' docker-compose.yml; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "present=false" >>"$GITHUB_OUTPUT"
+            msg="ZAP API scan NOT RUN: docker-compose.yml has no fraudshield-api service yet."
+            echo "::warning title=zap API scan not run::$msg"
+            echo "$msg" >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+  zap-api:
+    name: zap API scan from the contract (0 High-risk alerts, every path reached)
+    needs: zap-target
+    if: needs.zap-target.outputs.present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      REQUIRE_DOCKER: "1"
+      # ZAP 2.17.0 (zaproxy/zap-stable), pinned by digest.
+      ZAP_IMAGE: zaproxy/zap-stable@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make env
+      - name: Start the stack with the API
+        # Builds the API's image here, uncached; the bound keeps a hung start inside the job's limit.
+        run: docker compose --profile full up -d --build --wait --wait-timeout 900 fraudshield-api
+      # The baseline scan (zap-baseline.py) crawls from `/`. On its first run (abb3bf5, run
+      # 39887407268) it got a 401 there, stopped, and reported green from 4 URLs; none of the API's
+      # operations was reached (owner, 2026-10-23: the "scan that read nothing" pattern). The API
+      # scan is given the operations of the OpenAPI contract instead, and runs ZAP's passive and
+      # active rules against them. How many it reaches is what the coverage gate below reads.
+      # Unauthenticated: an operation that needs a key or a session is answered (401 or 403), but
+      # nothing behind authentication is exercised.
+      #
+      # ZAP scans a COPY of the contract, not the contract itself. RuleExpression (the rule DSL's
+      # tree) refers to itself in its `all`, `any` and `not` branches. ZAP's OpenAPI import failed
+      # on it at its first run (ca3653b..146d987, run 39896801735): resolving RuleDraft, the parser
+      # hit "Document nesting depth (1001) exceeds the maximum allowed (1000)". That it expands the
+      # self-reference until that limit is INFERRED from the error. The copy, taken from what the
+      # API serves, replaces those three nested references with a plain `{ type: object }`; the
+      # contract the API serves is unchanged. NOT TESTED as a result: nested rule expressions in
+      # the request bodies of POST /rules and POST /rules/{rule_id}/versions (a RuleDraft) and
+      # POST /rules/preview (a bare RuleExpression). Below the top level, ZAP's generated bodies
+      # carry an object with no defined content where a nested expression would be (INFERRED until
+      # a run shows the requests), so this scan says nothing about how the API handles nested
+      # `all`/`any`/`not` trees. The step also writes this to the run's summary.
+      - name: Scan copy of the contract (RuleExpression's recursion cut)
+        run: |
+          set -o pipefail
+          mkdir -p zap && chmod 777 zap
+          curl -fsS http://127.0.0.1:8080/api/docs/openapi.yaml -o zap/served.yaml
+          # shellcheck disable=SC2016 # a literal $ref, the YAML text being matched
+          self='{ $ref: "#/components/schemas/RuleExpression" }'
+          # Only inside RuleExpression's own definition; its uses elsewhere stay references.
+          # shellcheck disable=SC2016 # a sed program; $ and $ref are literal
+          sed '/^    RuleExpression:$/,/^    [A-Za-z][A-Za-z]*:$/ s|{ \$ref: "#/components/schemas/RuleExpression" }|{ type: object }|' \
+            zap/served.yaml > zap/contract-scan.yaml
+          cut=$(diff zap/served.yaml zap/contract-scan.yaml | grep -c '^> ' || true)
+          diff zap/served.yaml zap/contract-scan.yaml > zap/contract-scan.diff || true
+          {
+            echo "scan copy: $cut nested RuleExpression reference(s) replaced by { type: object }"
+            echo "NOT TESTED by this scan: nested rule expressions (all/any/not below the top level)"
+            echo "in the bodies of POST /rules, POST /rules/{rule_id}/versions and POST /rules/preview."
+            echo "The served contract is unchanged; the alteration is zap/contract-scan.diff."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          # Exactly the three known branches. A contract change that adds, moves or removes one
+          # must be looked at, not silently scanned with the recursion back or wrongly cut.
+          test "$cut" -eq 3
+          # The two uses outside the definition remain: /rules/preview's request body and
+          # RuleDraftBase.expression. These checks count the flow form of the reference only; they
+          # are not a cycle check, and any other recursion would still fail the import loudly.
+          test "$(grep -cF "$self" zap/contract-scan.yaml)" -eq 2
+      # -P 8090: ZAP listens on a fixed port of its own, away from the API's 8080 on the host
+      # network. The first run, without -P, logged "Cannot listen on port localhost:8080" while
+      # an add-on reinstalled during the update, though its daemon was on a free port (52391);
+      # whether that warning returns without -P is INFERRED. The fixed port settles it.
+      - name: ZAP API scan of the contract's operations
+        run: |
+          set -o pipefail
+          # -I: warnings do not fail the step; the gates below decide.
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+            zap-api-scan.py -t /zap/wrk/contract-scan.yaml -f openapi -P 8090 \
+              -O http://127.0.0.1:8080 -J zap-api.json -r zap-api.html -I 2>&1 | tee zap/zap-api.log
+      # A scan is evidence only for what it reached. The contract's distinct paths are the floor:
+      # fewer URLs means the import failed or was partial, and the gate fails rather than pass on
+      # what it did not read.
+      - name: Gate on coverage
+        run: |
+          set -o pipefail
+          # Path keys are the only two-space-indented keys that start with "/".
+          paths=$(grep -c '^  /' contracts/openapi/fraudshield-api.yaml)
+          scanned=$(sed -n 's/^Total of \([0-9][0-9]*\) URLs$/\1/p' zap/zap-api.log | tail -n 1)
+          echo "ZAP reached ${scanned:-an unknown number of} URLs; the contract has $paths paths" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -z "$scanned" ]; then
+            echo "::error title=zap coverage unknown::the scan's URL count was not found in its output"
+            exit 1
+          fi
+          test "$scanned" -ge "$paths"
+      - name: Gate on High-risk alerts
+        run: |
+          high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' zap/zap-api.json)
+          echo "ZAP High-risk alerts: $high" | tee -a "$GITHUB_STEP_SUMMARY"
+          jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.name)"' zap/zap-api.json | sort | uniq -c \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$high" -eq 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: zap-api
+          path: zap/
+          retention-days: 30
+      - name: Stop the stack
+        if: always()
+        run: docker compose --profile full down -v

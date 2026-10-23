@@ -64,3 +64,11 @@ resilience4j-spring-boot4 2.4.0 explicitly when the first module uses them (M1 a
   timestamps; the OpenAPI example validation in M1 asserts this.
 - Versions are re-checked when Spring Boot 4.1.x patch releases land; any library whose Boot 4
   support lags becomes an ADR update, not a silent downgrade.
+
+## Amendment, 2026-10-20 (security overrides)
+
+Three BOM-managed versions are overridden in `backend/pom.xml` for vulnerabilities with fixes (only
+Jackson appears in the table above), found by M9's Trivy scan on 2026-10-20
+(`docs/research/lab_notebook.md`, same date): Tomcat 11.0.24 to 11.0.25, Jackson 3.1.5 to 3.1.7
+(`jackson-bom.version`), and lz4-java, which Kafka clients 4.2.1 bring in, 1.10.1 to 1.11.4. Boot
+4.1.1 stays. Each override is dropped once the BOM manages the fixed version or later.

@@ -646,3 +646,82 @@ worktree of `main` → close M0 in `milestones.yaml` → tag `m0-complete`.
   M1 closes), with R-8 and DR-6 … DR-9 tracked as issues. The earlier tag conditions still apply:
   the tagged commit's CI green including `stack`, D-47/D-48 final with evidence, and the owner
   setting `main` as default branch with protection (or recorded as an open owner action).
+
+---
+
+# Final delta check (b08ba61..83a9090)            Reviewer role: Principal Reviewer
+Date: 2026-09-17 (UTC)   Branch/commit: m0/bootstrap @ 83a90905a78b7c671e39d758ead9ed5d92b2b2dd (6a48410, 63be261, 70046b1, 5761d21, ff2e30d, 6942c96, ed7223c, 83a9090)
+Verdict: APPROVED_WITH_MINORS
+
+Owner direction applied (2026-09-17): governance is time-boxed. MINOR and NIT gaps in governance
+tooling do not block M0 if they are logged in `docs/backlog/governance.md` with a due milestone.
+The milestone-level review is `docs/reviews/M0/milestone-review.md`.
+
+## Checks re-run (command → result)
+
+| Check | Result |
+|---|---|
+| Clean-worktree `uv sync --locked --no-cache`, `pnpm install --frozen-lockfile`, `make ci` at 83a9090 | exit 0; 1064 Java tests; tools 131 / ml 14; traceability 0 errors; licences 0 violations; visible SKIPPED lines for Docker suites (details in `milestone-review.md`) |
+| CI 6942c96: ci 35184012244 / stack 35184012351 / devcontainer 35184012247 | 7/7 success / `stack` executed, success / `build-and-verify` executed, success |
+| CI 83a9090: ci 35184418101 / stack 35184418147 / devcontainer 35184418108 | 7/7 success / `stack` job **skipped** (no inputs changed) / `build-and-verify` **skipped**; run-level "success" in both |
+| Stack runs on ed7223c, 5761d21, ff2e30d (35182920003, 35183327832, 35183578414) | `stack` job executed and success in each |
+| `git status --short` after mutations and worktree removal | clean |
+
+## Mutation spot checks
+
+`Money.requirePositive` accepting zero → killed (`zeroIsStorableButRejectedWherePositiveAmountRequired`).
+`HALF_EVEN` → `HALF_UP` → killed (5 rounding cases). `smallestMinorUnit` at storage scale → killed (7 cases).
+
+## Findings
+
+| # | Severity | Status | Verified by reviewer |
+|---|---|---|---|
+| DR-1 | MAJOR | **RESOLVED** | Devcontainer fixed (70046b1 safe.directory and smoke hardening; ff2e30d pnpm store outside the workspace; 6942c96 PATH/`remoteUser`; 5761d21 failure-log reporting). Run 35184012247 `build-and-verify` executed and succeeded; the `.post-create-ok` sentinel guards partial setups. ADR 0010 item 2 now states "verified" with the run ID |
+| DR-2 | MINOR | OPEN, backlogged | GOV-1, due before FR-02-02 moves (M3); ADR 0010 item 4 now names the gaps instead of claiming full enforcement |
+| DR-3 | MINOR | OPEN, backlogged | GOV-2, due before M1 closes |
+| DR-4 | MINOR | OPEN, backlogged | GOV-3, due before the first ml/obs service (M5); ADR 0010 item 5 names the gap |
+| DR-5 | MINOR | **RESOLVED** | ADR 0010 "Decided by" line and per-item attribution (owner decision vs author design, owner confirmation noted, ml/obs/full budgets provisional); `docs/reviews/M0/stack-gate-evidence.md` lists runs 1–7 with job-level detail; walkthrough wording no longer past tense |
+| DR-6 | NIT | OPEN, backlogged | GOV-4, M1 |
+| DR-7 | NIT | OPEN, backlogged | GOV-5, partly done (stack/devcontainer inputs now include lockfiles, manifests, `.mvn`); due "after `main` exists", which is not a milestone (see F-1 in the milestone review) |
+| DR-8 | NIT | **RESOLVED** | `smoke-test.sh` captures the bucket tree in a variable, prints it, then asserts `*smoke.txt*`; stack runs 5–7 green with it |
+| DR-9 | NIT | OPEN, backlogged | GOV-6, **unscheduled** (needs a due milestone, F-1) |
+| R-8 remainder | NIT | OPEN, backlogged | GOV-7, M1 |
+
+New in this delta (tracked in `milestone-review.md`): F-1 (NIT, backlog entries without due
+milestones), F-2 (NIT, `@Tag("D-17")` on money tests must not be mistaken for the D-17
+decision-engine property tests), F-3 (NIT, rounding ties not tested for BIF/SSP/SOS/USD/EUR),
+F-4 (NIT, path-filtered workflows report run-level "success" when their job is skipped; cite job
+conclusions). M-1 (MINOR, threat model absent; delta recorded; due M1).
+
+**Money boundary tests vs the owner's list** (`MoneyBoundaryTest`, 36 cases; `Money.requirePositive`,
+`Money.smallestMinorUnit`, `SMALLEST_STORABLE_MAGNITUDE`, `LARGEST_STORABLE_MAGNITUDE`):
+- Zero rejected where `amount > 0` is required: covered.
+- Smallest representable amount: covered, both storable (0.0001, every currency) and minor unit (RWF/UGX/BIF 1; KES/TZS/CDF/USD 0.01).
+- DECIMAL(18,4) maximum and one step beyond: covered.
+- Rounding at minor units: covered for RWF, UGX, KES, TZS and CDF, including negative ties (F-3 for the others).
+- Negatives: storable, but rejected by `requirePositive`.
+- Tags: `@Tag("D-17")`, `@Tag("D-43")`; Javadoc cites ADR 0009.
+- Null device fingerprint: recorded as an M3 test-case note on FR-01-04 and D-04, not implemented. This is correct, since no feature code exists.
+
+**Owner-confirmed items:** the per-profile memory budget and the M6 Resilience4j integration-test
+plan are recorded as confirmed in ADR 0010 and on NFR-REL-01. CI-minutes policy: `stack.yml` and
+`devcontainer.yml` run on input changes, pushes to `main` (forced), nightly and `workflow_dispatch`,
+as directed. The nightly schedule starts only once `main` is the default branch.
+
+## Evidence reproduced (claimed vs measured)
+
+| Claim (`stack-gate-evidence.md`, commit messages) | Measured | Match |
+|---|---|---|
+| 7 consecutive executed green stack jobs | verified job-by-job | yes |
+| 6942c96 first head with all three workflows green, every job executed | verified | yes |
+| Four earlier devcontainer failures | 35181726205, 35182920025, 35183327917, 35183578516 failure | yes |
+
+## Residual risks
+
+See `milestone-review.md`. In short: the Docker evidence is CI-only, path filters can delay
+detection of out-of-pattern regressions until the nightly run or the next push to `main`, and the
+backlogged governance gaps must meet their due milestones.
+
+**Merge/tag:** fast-forward `main` to 83a9090 is approved. The `m0-complete` tag is approved on the
+closing commit once its ci, stack and devcontainer runs on `main` are green with jobs executed.
+Exact closing-commit contents are in `milestone-review.md`, "Decisions".

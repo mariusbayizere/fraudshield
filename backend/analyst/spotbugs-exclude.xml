@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs / FindSecBugs exclusions of the analyst module, in addition to ../spotbugs-exclude.xml.
+  Every entry is scoped to named classes and one bug pattern and says why the finding does not
+  apply. Adding an entry requires review (build prompt I.2).
+-->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/4.10.4/spotbugs/etc/findbugsfilter.xsd">
+
+  <!--
+    Controllers hold Spring-managed collaborators, which are shared by design, and fail fast on a
+    missing one at wiring time (H.1). SPRING_ENDPOINT only marks controllers for manual review, which
+    AnalystAuthorisationTest automates for every handler.
+  -->
+  <Match>
+    <Or>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.alerts.AlertController"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.scoring.ScoringResultController"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.accounts.AccountController"/>
+    </Or>
+    <Or>
+      <Bug pattern="SPRING_ENDPOINT"/>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+      <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Or>
+  </Match>
+
+  <!--
+    The query classes hold the shared JDBC template and the profile computation, Spring-managed.
+  -->
+  <Match>
+    <Or>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.alerts.AlertQueries"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.accounts.AccountQueries"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.accounts.BehaviourProfiles"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+
+  <!--
+    The alert and account SQL is assembled only from string constants chosen by which filters and
+    which order are present, and from runs of "?" whose count is the number of bound values; every
+    value (ids, tokens, amounts, dates, statuses, cursor keys, limit) is a bind parameter. Row-level
+    isolation comes from the tenant views and tables.
+  -->
+  <Match>
+    <Or>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.alerts.AlertQueries"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.accounts.AccountQueries"/>
+    </Or>
+    <Bug pattern="SQL_INJECTION_SPRING_JDBC"/>
+  </Match>
+</FindBugsFilter>

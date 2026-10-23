@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:config-change",
+  "title": "fs.config.changes payload — applied atomically by version",
+  "type": "object",
+  "required": [
+    "config_kind",
+    "version",
+    "effective_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "config_kind": {
+      "type": "string",
+      "enum": [
+        "THRESHOLDS",
+        "RULES",
+        "API_KEY_REVOCATION",
+        "USER_TOKEN_VERSION",
+        "MCC_CIRCUIT_BREAKER",
+        "MODEL_ALIAS"
+      ]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "effective_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "entity_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 128
+    },
+    "summary": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}

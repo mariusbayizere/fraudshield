@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:label",
+  "title": "fs.labels payload — label with availability time for leakage-safe features (E.2)",
+  "type": "object",
+  "required": [
+    "label_id",
+    "transaction_id",
+    "label",
+    "source",
+    "label_available_at",
+    "transaction_timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "label_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "transaction_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "label": {
+      "type": "string",
+      "enum": [
+        "FRAUD",
+        "LEGITIMATE"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "ANALYST",
+        "SENIOR_OVERRIDE",
+        "CUSTOMER_VERIFICATION",
+        "CHARGEBACK",
+        "DATASET_UPLOAD"
+      ]
+    },
+    "fraud_type": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "SIM_SWAP",
+        "ACCOUNT_TAKEOVER",
+        "AGENT_FRAUD",
+        "VELOCITY_FRAUD",
+        "CARD_NOT_PRESENT",
+        "MULE_ACCOUNT",
+        "MERCHANT_FRAUD",
+        "SYNTHETIC_IDENTITY",
+        "OTHER",
+        null
+      ]
+    },
+    "label_available_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "transaction_timestamp": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "supersedes_label_id": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

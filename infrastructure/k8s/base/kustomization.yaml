@@ -1,0 +1,22 @@
+# FraudShield Kubernetes base: application workloads, network policies and the namespace's own
+# observability stack (SRS 08: nothing shared with another project). Overlays set the namespace,
+# replica counts, image digests and environment settings.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - network-policies.yaml
+  - edge.yaml
+  - api.yaml
+  - ml.yaml
+  # ml-worker.yaml is not deployed until the worker exists (PB-172): no code serves its metrics
+  # or the /health/live and /health/ready its probes read, and no image is built. Until then it
+  # is not schema- or policy-checked either; its NetworkPolicy and scrape job stay, matching no pod.
+  - frontend.yaml
+  - ../../prometheus
+  - ../../alertmanager
+  - ../../grafana
+labels:
+  - pairs: {app.kubernetes.io/part-of: fraudshield}
+    includeSelectors: false
+    includeTemplates: true

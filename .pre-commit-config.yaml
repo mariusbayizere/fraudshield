@@ -18,9 +18,10 @@ repos:
       - id: check-toml
       - id: check-json
       - id: end-of-file-fixer
-        exclude: ^docs/(srs|prompts)/
+        # The CC BY 4.0 legal code is stored exactly as published; see dataset/release/README.md.
+        exclude: ^docs/(srs|prompts)/|^dataset/release/LICENSE-CC-BY-4\.0\.txt$
       - id: trailing-whitespace
-        exclude: ^docs/(srs|prompts)/|\.md$
+        exclude: ^docs/(srs|prompts)/|\.md$|^dataset/release/LICENSE-CC-BY-4\.0\.txt$
 
   - repo: local
     hooks:

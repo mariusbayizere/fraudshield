@@ -153,13 +153,28 @@ DEFECT_LINKS: dict[str, tuple[str, ...]] = {
 
 DEFECT_MILESTONES: dict[str, str] = {
     **dict.fromkeys(("D-47", "D-48"), "M0"),
-    **dict.fromkeys(("D-20", "D-30", "D-31", "D-32", "D-49"), "M1"),
+    **dict.fromkeys(("D-30", "D-31"), "M1"),
+    # Re-planned out of M1 by ADR 0021 (M1 milestone review MAJOR-1): the M1 part is delivered and
+    # recorded in each row's notes; the remainder needs a later component.
+    "D-20": "M6",
+    "D-32": "M7",
+    "D-49": "M9",
     **dict.fromkeys(("D-07", "D-08"), "M2"),
     **dict.fromkeys(("D-03", "D-04"), "M3"),
-    **dict.fromkeys(("D-01", "D-02", "D-05", "D-06", "D-09"), "M4"),
-    **dict.fromkeys(("D-11", "D-16", "D-50"), "M5"),
-    **dict.fromkeys(("D-10", "D-12", "D-13", "D-14", "D-15", "D-17", "D-18", "D-25", "D-51"), "M6"),
-    **dict.fromkeys(("D-19", "D-23", "D-24", "D-26", "D-27"), "M7"),
+    **dict.fromkeys(("D-01", "D-02", "D-05", "D-06"), "M4"),
+    # ADR 0031: D-09's register closes when the paper states each claim, and five of its claims
+    # need primary sources only the author can supply. C-6 was measured in M4.
+    "D-09": "M11",
+    **dict.fromkeys(("D-11", "D-50"), "M5"),
+    **dict.fromkeys(("D-10", "D-12", "D-14", "D-15", "D-17", "D-18", "D-25"), "M6"),
+    **dict.fromkeys(("D-23", "D-24", "D-26"), "M7"),
+    # Carried M7 -> M10 (owner decision 2026-10-17): HMAC with pepper, the 2 s cache and pub/sub
+    # revocation are proved; what remains is the 10,000 TPS rationale, measured on M10's machine
+    # (PB-115), as D-13 and D-16 were carried.
+    "D-19": "M10",
+    # Carried M7 -> M8 (owner decision 2026-10-17): the server side is proved; what remains is the
+    # browser holding access tokens in memory only, which is the console's.
+    "D-27": "M8",
     **dict.fromkeys(
         (
             "D-22",
@@ -182,19 +197,62 @@ DEFECT_MILESTONES: dict[str, str] = {
         "M8",
     ),
     **dict.fromkeys(("D-21", "D-28"), "M9"),
+    # Carried M5 -> M10 (owner decision 2026-10-17): the resolution is built and the remaining
+    # gap is ADR 0032's throughput measurement, which needs M10's dedicated machine (ADR 0010).
+    "D-16": "M10",
+    # Carried M6 -> M10 (owner decision 2026-10-17): the resolution is built; whether the p95 meets
+    # 50 ms is PB-73's measurement on the dedicated machine (ADR 0059, ADR 0010).
+    "D-13": "M10",
+    # Carried M6 -> M7 (owner decision 2026-10-17): M6's external services run without real
+    # credentials; what remains is Google OAuth, which is staff authentication. Carried M7 -> M9
+    # (owner decision 2026-10-18): the in-process FakeGoogle is built; what remains is WireMock
+    # stubs of Google's JWKS and token endpoints in the compose stack, which M9 owns, and the
+    # sandbox suite reported as skipped without credentials (PB-113).
+    "D-51": "M9",
 }
 
 FR_MILESTONE_OVERRIDES: dict[str, str] = {
     "FR-01-07": "M1",
     "FR-02-02": "M3",
-    "FR-02-09": "M3",
+    # ADR 0027 filed FR-02-09 under M5, the milestone that built the feature store. Carried
+    # M5 -> M10 (owner decision 2026-10-17): production is fed only once PB-69..PB-71 land, which
+    # are M6's (docs/backlog/product.md), and PB-72's skew re-measurement in M10 closes it
+    # (ADR 0034). Filing it under M10 means M6's rule-7 check does not see PB-69..PB-71; they are
+    # tracked in the backlog's claims table with owner M6, and M6's close must report on them.
+    "FR-02-09": "M10",
+    # Carried M5 -> M10 (owner decision 2026-10-17): a throughput requirement (ADR 0032) that no
+    # shared machine can evidence (ADR 0010).
+    "FR-02-07": "M10",
     "FR-02-03": "M4",
     "FR-02-04": "M4",
     "FR-06-01": "M7",
     "FR-06-02": "M7",
-    "FR-06-06": "M7",
-    "FR-06-07": "M7",
+    # Carried M7 -> M8B (owner decision 2026-10-18): search and the hash chain are proved; what
+    # remains is each audit type asserted from a real action, and six of them (ANALYST_DECISION,
+    # SENIOR_OVERRIDE, THRESHOLD_CHANGE, RULE_CHANGE, MODEL_LIFECYCLE, REGULATORY_REPORT) are
+    # emitted end to end only by the analyst API's endpoints, plus a test that every write endpoint
+    # is audited, which needs those endpoints to exist (PB-109).
+    "FR-06-06": "M8B",
+    # Carried M7 -> M8 (owner decision 2026-10-17): the server side is proved; the remaining
+    # clause, the raw key shown once in the UI, is the console's.
+    "FR-06-07": "M8",
+    # Carried M7 -> M8 (owner decision 2026-10-17: a row with an unowned UI clause is not DONE):
+    # each row's server side is proved, and its remaining clauses are the console's. FR-07-02: the
+    # confirm field, the four-level meter, submit disabled. FR-07-03: sign-in on the login and
+    # registration pages. FR-07-04: the httpOnly cookie confirmed in the browser.
+    "FR-07-02": "M8",
+    "FR-07-03": "M8",
+    "FR-07-04": "M8",
     "FR-06-05": "M9",
+    # Carried M6 -> M10 (owner decision 2026-10-17, ADR 0059): the behaviour is built; the latency
+    # criteria (PB-73) and the 30 s batch (PB-74) are measured on the dedicated machine.
+    "FR-01-01": "M10",
+    "FR-01-06": "M10",
+    "FR-03-01": "M10",
+    "FR-03-03": "M10",
+    # Carried M6 -> M7 (owner decision 2026-10-17): M6 built the ApiKeyAuthenticator port and the
+    # machine-path scopes; key verification, rotation and staff-path 403s are M7's.
+    "FR-01-05": "M7",
 }
 
 FR_GROUP_MILESTONE = {
@@ -228,20 +286,56 @@ SECTION_MILESTONE = {
 }
 
 ROW_MILESTONE_OVERRIDES = {
+    # ADR 0024: the SRS files "all 44 features computable" under the dataset milestone, but the
+    # build prompt's own definitions place feature engineering in M3 ("M3 -- Feature engineering
+    # and feature store (Part E.2)", gate: "all 44 feature unit tests pass for all 6 channels")
+    # while M2's gate names rows, distribution targets, leakage and the datasheet and says nothing
+    # about features. A requirement filed under the wrong milestone, of the same family as D-01.
+    # ADR 0027: a completeness requirement cannot be judged before the data it counts exists.
+    # Six of the 44 are missing for 100% of records because the benchmark has no data for them
+    # (account opening dates, KYC tier history, agent float and location, round sums). It was
+    # filed under M6 as the last milestone expected to supply tables for them; M6 supplied none
+    # of that data, and no planned milestone does. It stays under M6, unmoved, until the owner
+    # decides its home or a recorded deviation (2026-10-17); see milestones.yaml.
+    "ML-DATA-07": "M6",
     "NFR-SEC-05": "M1",
-    "NFR-SEC-06": "M6",
-    "NFR-SEC-03": "M1",
-    "ML-GATE-12": "M5",
-    "ML-GATE-13": "M5",
-    "TEST-01": "M3",
+    # Carried M6 -> M9 (owner decision 2026-10-17): every M6 statement is parameterised; the
+    # verification the row names (OWASP ZAP, SonarQube) is M9's security scanning.
+    "NFR-SEC-06": "M9",
+    # Carried M6 -> M10 (owner decision 2026-10-17): the unmeasured "rebuilt from PostgreSQL within
+    # 5 minutes" belongs to M10's chaos suite (build prompt, M10); the feature store's fallback
+    # (PB-69, on m6/featurestore-fallback) must be merged first. Filed under M10, PB-69 is not
+    # seen by M6's rule-7 check, so M6's close reports on it (docs/backlog/product.md).
+    "NFR-REL-03": "M10",
+    # Carried M6 -> M10 (owner decision 2026-10-17): replica promotion by an operator is deployment
+    # (M9, D-49), and the row's test, deleting the primary, is M10's chaos suite, where it closes.
+    "NFR-REL-04": "M10",
+    # Carried M6 -> M10 (owner decision 2026-10-17): the "< 1 ms cache hit" is a benchmark
+    # (ADR 0010).
+    "NFR-REL-05": "M10",
+    # Moved M6 -> M7 (owner decision 2026-10-17): Google OAuth fallback is staff authentication.
+    "NFR-REL-06": "M7",
+    # ADR 0021: vault and tokenisation M6. Carried M7 -> M8B (owner decision 2026-10-18): the
+    # inspector test over every analyst endpoint needs the analyst API, which M8B builds (PB-114).
+    "NFR-SEC-03": "M8B",
+    # Carried M5 -> M10 (owner decision 2026-10-17, ADR 0035): ML-GATE-12 needs the dedicated
+    # machine; ML-GATE-13's gate logic is built and needs a deployment running the shadow
+    # comparator for 24 hours and at least 50,000 scores.
+    "ML-GATE-12": "M10",
+    "ML-GATE-13": "M10",
+    # ADR 0027: three of TEST-01's four named scenarios are covered; the fourth needs
+    # round_sum_flag, whose source-data gap the registry schedules for M4.
+    "TEST-01": "M4",
     "TEST-02": "M4",
     "TEST-03": "M6",
     "TEST-04": "M7",
-    "TEST-05": "M6",
+    # Carried M6 -> M10 (owner decision 2026-10-17): "p95 < 50 ms confirmed" is PB-73's measurement;
+    # the analyst-dashboard end (M7/M8) lands before M10.
+    "TEST-05": "M10",
     "TEST-06": "M8",
     "TEST-07": "M7",
     "TEST-08": "M5",
-    "TEST-10": "M5",
+    "TEST-10": "M10",  # carried M5 -> M10 (owner decision 2026-10-17): the latency clause, ADR 0032
     "TEST-11": "M8",
     "TEST-12": "M8",
     "TEST-13": "M9",

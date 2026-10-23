@@ -1,0 +1,17 @@
+\begin{tabular}{llrlrl}
+\toprule
+Gate & Metric & Value & 95\% CI & Threshold & Result \\
+\midrule
+ML-GATE-01 & AUC-ROC & 0.966 & [0.957, 0.974] & $\geq$ 0.94 & pass \\
+ML-GATE-02 & Recall at 1\% FPR (D-01) & 0.861 & [0.839, 0.882] & $\geq$ 0.72 & pass \\
+ML-GATE-03 & Recall at 0.60 & 0.753 & [0.726, 0.780] & $\geq$ 0.88 & \textbf{fail} \\
+ML-GATE-04 & F1 at 0.60 & 0.819 & [0.799, 0.838] & $\geq$ 0.8 & pass \\
+ML-GATE-05 & FPR at 0.85 & 0.000 & [0.000, 0.000] & $<$ 0.015 & pass \\
+ML-GATE-06 & FNR at 0.60 & 0.247 & [0.220, 0.274] & $<$ 0.12 & \textbf{fail} \\
+ML-GATE-07 & MOBILE_MONEY AUC-ROC & 0.946 & [0.926, 0.964] & $\geq$ 0.92 & pass \\
+ML-GATE-08 & USSD AUC-ROC & 0.944 & [0.919, 0.967] & $\geq$ 0.9 & pass \\
+ML-GATE-09 & AGENT_BANKING AUC-ROC & 0.981 & [0.965, 0.994] & $\geq$ 0.91 & pass \\
+ML-GATE-10 & SHAP coverage, HIGH and MEDIUM & 1.000 & [1.000, 1.000] & $\geq$ 1 & pass \\
+ML-GATE-11 & ECE, 15 equal-mass bins & 0.001 & [0.001, 0.001] & $<$ 0.05 & pass \\
+\bottomrule
+\end{tabular}

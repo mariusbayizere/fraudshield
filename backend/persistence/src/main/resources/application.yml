@@ -1,0 +1,19 @@
+# Database tool configuration (ADR 0017, ADR 0019). Connection values come from the environment;
+# nothing secret is committed.
+spring:
+  main:
+    web-application-type: none
+    banner-mode: off
+  datasource:
+    url: ${FRAUDSHIELD_DB_URL:jdbc:postgresql://127.0.0.1:5432/fraudshield_db}
+    username: ${FRAUDSHIELD_DB_MIGRATOR_USER:fs_migrator}
+    password: ${FRAUDSHIELD_DB_MIGRATOR_PASSWORD:}
+  flyway:
+    schemas: fraudshield
+    default-schema: fraudshield
+    create-schemas: false
+    locations: classpath:db/migration
+
+fraudshield:
+  demo-seed:
+    enabled: false

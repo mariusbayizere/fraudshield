@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:transaction-scored",
+  "title": "fs.transactions.scored payload",
+  "type": "object",
+  "required": [
+    "transaction_id",
+    "account_token",
+    "counterparty_token",
+    "amount",
+    "amount_rwf",
+    "channel",
+    "merchant_category_code",
+    "transaction_timestamp",
+    "received_at",
+    "decision",
+    "risk_tier",
+    "ensemble_score",
+    "anomaly_score",
+    "scoring_result_id",
+    "model_version",
+    "ml_unavailable_fallback",
+    "decision_latency_ms",
+    "thresholds_version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "transaction_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "account_token": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+    },
+    "counterparty_token": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+    },
+    "device_token": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "agent_token": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "amount": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Money"
+    },
+    "amount_rwf": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/DecimalAmount"
+    },
+    "channel": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Channel"
+    },
+    "merchant_category_code": {
+      "type": "string",
+      "pattern": "^[0-9]{4}$"
+    },
+    "latitude": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90
+    },
+    "longitude": {
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180
+    },
+    "transaction_timestamp": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "received_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "APPROVE",
+        "DECLINE",
+        "HOLD"
+      ]
+    },
+    "risk_tier": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/RiskTier"
+    },
+    "ensemble_score": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Probability"
+    },
+    "anomaly_score": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Probability"
+    },
+    "scoring_result_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "model_version": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "ml_unavailable_fallback": {
+      "type": "boolean"
+    },
+    "decision_latency_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "thresholds_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason_codes": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "$ref": "urn:fraudshield:kafka:common#/$defs/ReasonCode"
+      }
+    }
+  }
+}

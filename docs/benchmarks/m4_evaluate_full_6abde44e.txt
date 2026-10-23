@@ -1,0 +1,76 @@
+# evidence-commit: 3d6226a570ac6b9f9572d3a826a8c7d000c5c31b
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_ml.cli evaluate dataset/output/bench1m --packs dataset/output/packs.json --split dataset/output/split.json --corpus-rows 400000 --train-rows 30000 --test-rows 60000 --cache dataset/output/features_full.parquet
+# exit: 0
+
+computing 38 features for 90000 rows...
+  2000/90000 rows  853/s  ~1.7 min left
+  4000/90000 rows  786/s  ~1.8 min left
+  6000/90000 rows  812/s  ~1.7 min left
+  8000/90000 rows  769/s  ~1.8 min left
+  10000/90000 rows  648/s  ~2.1 min left
+  12000/90000 rows  598/s  ~2.2 min left
+  14000/90000 rows  575/s  ~2.2 min left
+  16000/90000 rows  547/s  ~2.3 min left
+  18000/90000 rows  520/s  ~2.3 min left
+  20000/90000 rows  494/s  ~2.4 min left
+  22000/90000 rows  478/s  ~2.4 min left
+  24000/90000 rows  460/s  ~2.4 min left
+  26000/90000 rows  447/s  ~2.4 min left
+  28000/90000 rows  432/s  ~2.4 min left
+  30000/90000 rows  433/s  ~2.3 min left
+  32000/90000 rows  413/s  ~2.3 min left
+  34000/90000 rows  394/s  ~2.4 min left
+  36000/90000 rows  383/s  ~2.3 min left
+  38000/90000 rows  370/s  ~2.3 min left
+  40000/90000 rows  359/s  ~2.3 min left
+  42000/90000 rows  353/s  ~2.3 min left
+  44000/90000 rows  342/s  ~2.2 min left
+  46000/90000 rows  335/s  ~2.2 min left
+  48000/90000 rows  334/s  ~2.1 min left
+  50000/90000 rows  332/s  ~2.0 min left
+  52000/90000 rows  330/s  ~1.9 min left
+  54000/90000 rows  329/s  ~1.8 min left
+  56000/90000 rows  320/s  ~1.8 min left
+  58000/90000 rows  319/s  ~1.7 min left
+  60000/90000 rows  318/s  ~1.6 min left
+  62000/90000 rows  316/s  ~1.5 min left
+  64000/90000 rows  314/s  ~1.4 min left
+  66000/90000 rows  311/s  ~1.3 min left
+  68000/90000 rows  308/s  ~1.2 min left
+  70000/90000 rows  302/s  ~1.1 min left
+  72000/90000 rows  301/s  ~1.0 min left
+  74000/90000 rows  301/s  ~0.9 min left
+  76000/90000 rows  301/s  ~0.8 min left
+  78000/90000 rows  302/s  ~0.7 min left
+  80000/90000 rows  303/s  ~0.6 min left
+  82000/90000 rows  303/s  ~0.4 min left
+  84000/90000 rows  304/s  ~0.3 min left
+  86000/90000 rows  304/s  ~0.2 min left
+  88000/90000 rows  304/s  ~0.1 min left
+  90000/90000 rows  304/s  ~0.0 min left
+wrote the feature matrix to dataset/output/features_full.parquet
+MODEL ON D-07's PUBLISHED SPLIT — fitted on the train period, scored on the test
+period, embargo excluded. Not tuned and not calibrated: the validation and calibration
+periods are identified and deliberately unused.
+
+  split                        train < 2025-08-25 05:24 <= validation (calibration from 2025-09-26 13:13) < 2025-10-21 22:02 <= embargo < 2025-10-28 22:02 <= test
+  features trained on          38 (the computable ones, never 44)
+  corpus rows scanned          400000
+  train rows / fraud           30000 / 286 (0.953%)
+  test rows / fraud            60000 / 551 (0.918%)
+
+  best single feature          0.893  (velocity_ratio_1h_vs_30d, defined on every row)
+  best trivial rule            0.665  (amount_to_max_90d_ratio)
+  model AUC                    0.991 +/-0.006
+  MARGIN OVER THE FEATURE      +0.098
+  MARGIN OVER THE TRIVIAL RULE +0.326
+  recall at 1% FPR             0.947
+
+  strongest feature of any     0.893  (velocity_ratio_1h_vs_30d)
+  ...defined on                100.0% of held-out rows (60000 rows, 551 fraud)
+
+
+  TRAINED ON THE LAST 128 DAYS of the train period, not all
+  of it: the corpus is bounded and the feature pass is its cost. A figure from here is
+  comparable with the gates in its split and not in its training volume.

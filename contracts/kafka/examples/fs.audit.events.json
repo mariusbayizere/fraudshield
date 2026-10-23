@@ -1,0 +1,23 @@
+{
+  "event_id": "fcb2ee95-25d0-5570-a219-cf68daa7ef95",
+  "event_type": "audit.appended",
+  "schema_version": 1,
+  "occurred_at": "2026-09-17T08:15:30Z",
+  "institution_id": "5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "producer": "fraudshield-api",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "event_type": "AUTO_BLOCK",
+    "action": "BLOCK",
+    "entity_type": "transaction",
+    "entity_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+    "event_at": "2026-09-17T08:15:30Z",
+    "writer_partition": 3,
+    "actor_user_id": null,
+    "actor_role": null,
+    "before_value": null,
+    "after_value": {
+      "decision": "DECLINE"
+    }
+  }
+}

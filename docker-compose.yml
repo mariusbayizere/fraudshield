@@ -2,7 +2,8 @@
 #
 #   make up            # profile "core": data stores, streaming, MLflow and third-party fakes
 #
-# Profiles: core (M0), ml (scoring service, M5), obs (Prometheus/Grafana/Loki, M9), full (all).
+# Profiles: core (M0), ml (scoring service, M5), obs (Prometheus/Grafana/Loki, M9), full (all,
+# with the API and the one-shots it needs: migrations and Kafka topics).
 # Every port binds to 127.0.0.1 only. Credentials come from .env (see .env.example; `make env`).
 # SYNTHETIC DATA ONLY — this stack is not a production deployment (D-21).
 # Image versions and the reasons for each choice: docs/adr/0003, docs/adr/0005.
@@ -26,19 +27,58 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?run make env}
       MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:?run make env}
+      FS_MIGRATOR_DB_PASSWORD: ${FS_MIGRATOR_DB_PASSWORD:?run make env}
+      FS_APP_DB_PASSWORD: ${FS_APP_DB_PASSWORD:?run make env}
+      FS_APP_READONLY_DB_PASSWORD: ${FS_APP_READONLY_DB_PASSWORD:?run make env}
+      FS_COMPLIANCE_RO_DB_PASSWORD: ${FS_COMPLIANCE_RO_DB_PASSWORD:?run make env}
+      FS_SCORER_DB_PASSWORD: ${FS_SCORER_DB_PASSWORD:?run make env}
       TIMESCALEDB_TELEMETRY: "off"
     command: ["postgres", "-c", "shared_preload_libraries=timescaledb", "-c", "timescaledb.telemetry_level=off"]
     ports: ["127.0.0.1:5432:5432"]
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
       - ./infrastructure/docker/timescaledb/init:/docker-entrypoint-initdb.d:ro
+      - ./backend/persistence/src/main/resources/db/bootstrap:/fraudshield-bootstrap:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d fraudshield_db && psql -U postgres -d mlflow -tAc 'select 1' >/dev/null"]
+      # -h 127.0.0.1: over TCP, so the check fails while initdb's scripts still run on the
+      # socket-only temporary server, and passes only once the server the clients use listens.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d fraudshield_db && psql -U postgres -d mlflow -tAc 'select 1' >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 30
     deploy:
       resources: { limits: { memory: 768m } }
+
+  # One-shot: applies the main database's Flyway migrations (db/migration) as fs_migrator, the role
+  # that owns the schema (ADR 0017). The API never migrates (spring.flyway.enabled=false) and never
+  # holds the migrator's credentials, so the API service depends on this one completing: an API
+  # against an unmigrated database fails in a way that looks like a code defect. Same settings as
+  # the database tool's (backend/persistence application.yml), so `make seed-demo` finds the
+  # history this service wrote and applies nothing twice. Under `full` only, for the reason given
+  # at pii-vault-migrate.
+  fraudshield-migrate:
+    image: flyway/flyway:12.4.0
+    profiles: [full]
+    networks: [fraudshield]
+    depends_on:
+      timescaledb: { condition: service_healthy }
+    environment:
+      FLYWAY_URL: jdbc:postgresql://timescaledb:5432/fraudshield_db
+      FLYWAY_USER: fs_migrator
+      FLYWAY_PASSWORD: ${FS_MIGRATOR_DB_PASSWORD:?run make env}
+      FLYWAY_SCHEMAS: fraudshield
+      FLYWAY_DEFAULT_SCHEMA: fraudshield
+      FLYWAY_CREATE_SCHEMAS: "false"
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      # The healthcheck checks over TCP; retries cover a server that restarts just after it.
+      FLYWAY_CONNECT_RETRIES: "20"
+      JAVA_ARGS: -Xmx80m
+    command: ["migrate"]
+    volumes:
+      - ./backend/persistence/src/main/resources/db/migration:/flyway/sql:ro
+    restart: "no"
+    deploy:
+      resources: { limits: { memory: 128m } }
 
   # Separate PostgreSQL instance for encrypted PII and the tokenisation map (D-20).
   pii-vault:
@@ -49,15 +89,54 @@ services:
       POSTGRES_DB: fraudshield_pii
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${PII_VAULT_SUPERUSER_PASSWORD:?run make env}
+      FS_VAULT_MIGRATOR_DB_PASSWORD: ${FS_VAULT_MIGRATOR_DB_PASSWORD:?run make env}
+      FS_VAULT_DB_PASSWORD: ${FS_VAULT_DB_PASSWORD:?run make env}
     ports: ["127.0.0.1:5433:5432"]
-    volumes: [pii-vault-data:/var/lib/postgresql/data]
+    volumes:
+      - pii-vault-data:/var/lib/postgresql/data
+      # The vault's roles and schema (db/vault/bootstrap.sql), on first start (ADR 0069).
+      - ./infrastructure/docker/pii-vault/init:/docker-entrypoint-initdb.d:ro
+      - ./backend/persistence/src/main/resources/db/vault:/fraudshield-vault:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d fraudshield_pii"]
+      # Over TCP, as for timescaledb.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d fraudshield_pii"]
       interval: 5s
       timeout: 5s
       retries: 30
     deploy:
       resources: { limits: { memory: 256m } }
+
+  # One-shot: applies the vault's Flyway migrations (db/vault) as fs_vault_migrator, the only role
+  # that may change the vault's schema. The API never holds the migrator's credentials (ADR 0069).
+  # Not part of `up`: `make up` runs it with `docker compose run --rm` once the stack is healthy,
+  # which returns its exit status. Under `up --wait`, Compose v2 fails on a one-shot that has
+  # already exited unless a service depends on it (as mlflow does on object-store-init), and
+  # whether it has exited when Compose looks is a race: CI's stack job lost it on 2026-09-23.
+  # Listed under `full` only so that `--profile core up` never starts it. First verified in CI by
+  # the stack job executing on e7a5be5 (run #313, 2026-09-23): make up, smoke and seed-demo green.
+  # The race was reproduced by the sixth review (Compose 5.5.1, 2.29.7, 2.33.1). Any service that
+  # needs the vault migrated must depend on this one with service_completed_successfully, in the
+  # same profile; under `--profile full up --wait` without such a dependent, the race returns.
+  pii-vault-migrate:
+    image: flyway/flyway:12.4.0
+    profiles: [full]
+    networks: [fraudshield]
+    depends_on:
+      pii-vault: { condition: service_healthy }
+    environment:
+      FLYWAY_URL: jdbc:postgresql://pii-vault:5432/fraudshield_pii
+      FLYWAY_USER: fs_vault_migrator
+      FLYWAY_PASSWORD: ${FS_VAULT_MIGRATOR_DB_PASSWORD:?run make env}
+      FLYWAY_SCHEMAS: vault
+      FLYWAY_CONNECT_RETRIES: "20"
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      JAVA_ARGS: -Xmx80m
+    command: ["migrate"]
+    volumes:
+      - ./backend/persistence/src/main/resources/db/vault:/flyway/sql:ro
+    restart: "no"
+    deploy:
+      resources: { limits: { memory: 128m } }
 
   redis:
     <<: *defaults
@@ -117,6 +196,25 @@ services:
     deploy:
       resources: { limits: { memory: 768m } }
 
+  # One-shot: creates the topics of contracts/kafka/topics.yaml, which producers never create
+  # (ADR 0012). Under `full` only, with the API depending on it, as for pii-vault-migrate.
+  kafka-topics-init:
+    image: apache/kafka:4.3.1
+    profiles: [full]
+    networks: [fraudshield]
+    depends_on:
+      kafka: { condition: service_healthy }
+    environment:
+      # Each CLI call starts its own JVM; a small heap keeps it inside the limit below.
+      KAFKA_HEAP_OPTS: -Xmx64m
+    entrypoint: ["/bin/sh", "/fraudshield/create-topics.sh"]
+    volumes:
+      - ./infrastructure/docker/kafka/create-topics.sh:/fraudshield/create-topics.sh:ro
+      - ./contracts/kafka/topics.yaml:/fraudshield/topics.yaml:ro
+    restart: "no"
+    deploy:
+      resources: { limits: { memory: 256m } }
+
   # S3-compatible artifact store for MLflow (ADR 0005).
   object-store:
     <<: *defaults
@@ -173,6 +271,12 @@ services:
     environment:
       MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:?run make env}
       MLFLOW_S3_ENDPOINT_URL: http://object-store:8333
+      # MLflow 3.x launches a job runner and one Huey consumer process per server-side job type
+      # (LLM judges, prompt optimisation) when the backend store is a database. FraudShield uses
+      # none of them; together they held the container at its memory limit (memory.peak = limit,
+      # thousands of memory.max events), so the kernel killed a process during artifact uploads and
+      # MLflow answered HTTP 500. Disabled rather than given more memory.
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
       AWS_ACCESS_KEY_ID: ${OBJECT_STORE_ACCESS_KEY:?run make env}
       AWS_SECRET_ACCESS_KEY: ${OBJECT_STORE_SECRET_KEY:?run make env}
     entrypoint: ["/bin/sh", "-c"]
@@ -226,6 +330,95 @@ services:
     deploy:
       resources: { limits: { memory: 256m } }
 
+  # The FraudShield API (C.1 fraudshield-api), built from backend/Dockerfile. Profile `full` only:
+  # it needs every one-shot above to have completed, which `make up` (profile core) never waits
+  # for. Start it with `docker compose --profile full up -d --wait fraudshield-api`.
+  #
+  # Runtime as in infrastructure/k8s/base/api.yaml: user 10001, read-only root filesystem, no
+  # capabilities, a writable /tmp and the spool on a volume. Memory: 1 GiB, ASSUMED (owner,
+  # 2026-10-22); the Kubernetes limit is 2 GiB. There is no scorer in this stack yet (PB-179), so
+  # the target below refuses connections and the rule fallback decides every transaction (C.4).
+  # The dev profile is what permits the vault's keys in configuration (ADR 0069 point 10) and
+  # marks the deployment synthetic (D-21, ADR 0019).
+  fraudshield-api:
+    <<: *defaults
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: fraudshield-api:local
+    profiles: [full]
+    depends_on:
+      timescaledb: { condition: service_healthy }
+      fraudshield-migrate: { condition: service_completed_successfully }
+      pii-vault: { condition: service_healthy }
+      pii-vault-migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      kafka-topics-init: { condition: service_completed_successfully }
+      mailpit: { condition: service_healthy }
+      wiremock: { condition: service_healthy }
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      FRAUDSHIELD_DB_URL: jdbc:postgresql://timescaledb:5432/fraudshield_db
+      FRAUDSHIELD_DB_APP_USER: fs_app
+      FRAUDSHIELD_DB_APP_PASSWORD: ${FS_APP_DB_PASSWORD:?run make env}
+      FRAUDSHIELD_REDIS_URI: redis://:${REDIS_PASSWORD:?run make env}@redis:6379
+      FRAUDSHIELD_KAFKA_BOOTSTRAP: kafka:29092
+      FRAUDSHIELD_SCORER_TARGET: 127.0.0.1:1
+      FRAUDSHIELD_SCORER_PLAINTEXT: "true"
+      FRAUDSHIELD_SMTP_HOST: mailpit
+      FRAUDSHIELD_SMTP_PORT: "1025"
+      FRAUDSHIELD_API_KEY_ENVIRONMENT: dev
+      # The staff console is not in this stack; links in staff email point at a local dev server.
+      FRAUDSHIELD_CONSOLE_BASE_URL: http://127.0.0.1:5173
+      FRAUDSHIELD_MAIL_FROM: no-reply@fraudshield.local
+      FRAUDSHIELD_TOKEN_KEY_HEX: ${FS_API_TOKEN_KEY_HEX:?run make env}
+      FRAUDSHIELD_SECRET_BOX_KEY_ID: dev
+      FRAUDSHIELD_SECRET_BOX_KEY_HEX: ${FS_API_SECRET_BOX_KEY_HEX:?run make env}
+      FRAUDSHIELD_JWT_KEY_ID: dev
+      FRAUDSHIELD_JWT_PRIVATE_KEY_FILE: /run/secrets/api_jwt_signing_key
+      FRAUDSHIELD_API_KEY_PEPPER_1: ${FS_API_KEY_PEPPER_HEX:?run make env}
+      FRAUDSHIELD_VAULT_URL: jdbc:postgresql://pii-vault:5432/fraudshield_pii
+      FRAUDSHIELD_VAULT_USERNAME: fs_vault
+      FRAUDSHIELD_VAULT_PASSWORD: ${FS_VAULT_DB_PASSWORD:?run make env}
+      FRAUDSHIELD_VAULT_KEYPROVIDER: configured
+      FRAUDSHIELD_VAULT_CURRENTKEYID: dev
+      FRAUDSHIELD_VAULT_MASTERKEYS_DEV: ${FS_VAULT_MASTER_KEY_B64:?run make env}
+      FRAUDSHIELD_VAULT_INDEXKEY: ${FS_VAULT_INDEX_KEY_B64:?run make env}
+      # Africa's Talking is faked by WireMock (D-51); no real provider is reachable from here.
+      FRAUDSHIELD_SMS_BASEURL: http://wiremock:8080/
+      FRAUDSHIELD_SMS_USERNAME: sandbox
+      FRAUDSHIELD_SMS_APIKEY: ${FS_SMS_API_KEY:?run make env}
+    secrets:
+      - api_jwt_signing_key
+    read_only: true
+    tmpfs:
+      - /tmp:rw,exec,size=64m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    user: "10001:10001"
+    # The management port (8081) stays inside the network, as in Kubernetes.
+    ports: ["127.0.0.1:8080:8080"]
+    volumes:
+      - api-spool:/var/lib/fraudshield/spool
+    healthcheck:
+      # The image has no curl or wget. Actuator health on the management port aggregates the
+      # database, Redis and mail; the public /api/v1/health answers UP whenever the server is up.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8081 &&
+          printf 'GET /actuator/health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          grep -q '"status":"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    deploy:
+      resources: { limits: { memory: 1024m } }
+
 networks:
   fraudshield:
     name: fraudshield
@@ -236,3 +429,9 @@ volumes:
   redis-data:
   kafka-data:
   object-store-data:
+  api-spool:
+
+secrets:
+  # Written by `make env` (generate-dev-env.sh); git-ignored.
+  api_jwt_signing_key:
+    file: ./.dev-secrets/api-jwt-signing-key.pem

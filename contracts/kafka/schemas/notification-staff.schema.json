@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:notification-staff",
+  "title": "fs.notifications.staff payload",
+  "type": "object",
+  "required": [
+    "notification_id",
+    "kind",
+    "template_key",
+    "parameters"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "notification_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "recipient_user_id": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recipient_role": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Role"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "ACCOUNT_FROZEN",
+        "ALERT_ESCALATED",
+        "ACCOUNT_LOCKED",
+        "APPROVAL_REQUIRED",
+        "WELCOME",
+        "PASSWORD_RESET_CODE",
+        "EMAIL_VERIFICATION",
+        "MODEL_GATE_RESULT"
+      ]
+    },
+    "template_key": {
+      "type": "string",
+      "pattern": "^(email|push|ws)\\.[a-z_]+$"
+    },
+    "parameters": {
+      "type": "object",
+      "description": "Closed schema selected by kind"
+    }
+  },
+  "description": "Staff notification intents. Parameters are closed per kind and never carry credentials: temporary passwords, one-time codes and single-use links (WELCOME, PASSWORD_RESET_CODE, EMAIL_VERIFICATION, ACCOUNT_LOCKED unlock) are minted by the auth module when the notification service sends the message and exist in plaintext only in that request; only their hashes are stored (ADR 0012).",
+  "$defs": {
+    "AccountFrozenParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "account_token",
+        "high_risk_count"
+      ],
+      "properties": {
+        "account_token": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+        },
+        "high_risk_count": {
+          "type": "integer",
+          "minimum": 3
+        }
+      }
+    },
+    "AlertEscalatedParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alert_id",
+        "target_role",
+        "escalated_by_user_id"
+      ],
+      "properties": {
+        "alert_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        },
+        "target_role": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Role"
+        },
+        "escalated_by_user_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        }
+      }
+    },
+    "AccountLockedParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "user_id",
+        "locked_until"
+      ],
+      "properties": {
+        "user_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        },
+        "locked_until": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+        }
+      }
+    },
+    "ApprovalRequiredParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pending_user_id"
+      ],
+      "properties": {
+        "pending_user_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        }
+      }
+    },
+    "WelcomeParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "user_id"
+      ],
+      "properties": {
+        "user_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        }
+      }
+    },
+    "PasswordResetCodeParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "user_id"
+      ],
+      "properties": {
+        "user_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        }
+      }
+    },
+    "EmailVerificationParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "user_id"
+      ],
+      "properties": {
+        "user_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        }
+      }
+    },
+    "ModelGateResultParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_version",
+        "passed"
+      ],
+      "properties": {
+        "model_version": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "required": [
+            "recipient_user_id"
+          ]
+        },
+        {
+          "required": [
+            "recipient_role"
+          ]
+        }
+      ]
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "ACCOUNT_FROZEN"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/AccountFrozenParameters"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "ALERT_ESCALATED"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/AlertEscalatedParameters"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "ACCOUNT_LOCKED"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/AccountLockedParameters"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "APPROVAL_REQUIRED"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/ApprovalRequiredParameters"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "WELCOME"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/WelcomeParameters"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "PASSWORD_RESET_CODE"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/PasswordResetCodeParameters"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "EMAIL_VERIFICATION"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/EmailVerificationParameters"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "MODEL_GATE_RESULT"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/ModelGateResultParameters"
+          }
+        }
+      }
+    }
+  ]
+}

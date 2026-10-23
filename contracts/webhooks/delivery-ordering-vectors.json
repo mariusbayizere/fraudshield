@@ -1,0 +1,68 @@
+{
+  "description": "Receiver ordering vectors (ADR 0011 section 9): for each scenario, deliveries arrive in the listed order for one transaction and the receiver must APPLY or IGNORE each. Apply only when decision_sequence is greater than the last applied; acknowledge (2xx) either way.",
+  "scenarios": [
+    {
+      "name": "in order, including a repeated decision value",
+      "deliveries": [
+        {
+          "event_id": "8a1e0c6e-1f0a-4c3b-9d11-0a0b0c0d0e01",
+          "decision_sequence": 2,
+          "decision": "DECLINE",
+          "expected": "APPLY"
+        },
+        {
+          "event_id": "8a1e0c6e-1f0a-4c3b-9d11-0a0b0c0d0e02",
+          "decision_sequence": 3,
+          "decision": "APPROVE",
+          "expected": "APPLY"
+        },
+        {
+          "event_id": "8a1e0c6e-1f0a-4c3b-9d11-0a0b0c0d0e03",
+          "decision_sequence": 4,
+          "decision": "DECLINE",
+          "expected": "APPLY"
+        }
+      ]
+    },
+    {
+      "name": "a delayed retry of an older APPROVE after a newer DECLINE",
+      "deliveries": [
+        {
+          "event_id": "8a1e0c6e-1f0a-4c3b-9d11-0a0b0c0d0e04",
+          "decision_sequence": 2,
+          "decision": "DECLINE",
+          "expected": "APPLY"
+        },
+        {
+          "event_id": "8a1e0c6e-1f0a-4c3b-9d11-0a0b0c0d0e06",
+          "decision_sequence": 4,
+          "decision": "DECLINE",
+          "expected": "APPLY"
+        },
+        {
+          "event_id": "8a1e0c6e-1f0a-4c3b-9d11-0a0b0c0d0e05",
+          "decision_sequence": 3,
+          "decision": "APPROVE",
+          "expected": "IGNORE"
+        }
+      ]
+    },
+    {
+      "name": "the same state delivered twice",
+      "deliveries": [
+        {
+          "event_id": "8a1e0c6e-1f0a-4c3b-9d11-0a0b0c0d0e07",
+          "decision_sequence": 2,
+          "decision": "TIMEOUT_RELEASE",
+          "expected": "APPLY"
+        },
+        {
+          "event_id": "8a1e0c6e-1f0a-4c3b-9d11-0a0b0c0d0e07",
+          "decision_sequence": 2,
+          "decision": "TIMEOUT_RELEASE",
+          "expected": "IGNORE"
+        }
+      ]
+    }
+  ]
+}

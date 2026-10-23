@@ -513,7 +513,7 @@ Implements FR-03-04/05 with D-25. SMS in the customer's locale, GSM-7 only, ≤ 
 
 ### E.10 Observability
 
-Metrics (Prometheus naming): `fs_ingest_requests_total{channel,status}`, `fs_decision_latency_seconds` (histogram, buckets 5 ms … 200 ms), `fs_scoring_latency_seconds{stage}`, `fs_feature_latency_seconds{source}`, `fs_decisions_total{tier,decision,channel,fallback}`, `fs_kafka_consumer_lag{topic,group}`, `fs_spool_depth`, `fs_alert_queue_depth{tier}`, `fs_alert_timeout_release_total{channel}`, `fs_review_duration_seconds`, `fs_false_positive_rate`, `fs_feature_psi{feature}`, `fs_model_version_info{alias}`, `fs_redis_hit_ratio`, `fs_db_pool_in_use`. OpenTelemetry traces from edge to scorer to Kafka consumers with trace ID stored on the ScoringResult. Logs: JSON, PII-redacting processors in both languages, with tests proving redaction. Alert rules implement every SRS 8.2 threshold plus D-10 timeout-release alert. Runbooks in `docs/runbooks/` for each page-worthy alert.
+Metrics (Prometheus naming): `fs_ingest_requests_total{channel,status}`, `fs_decision_latency_seconds` (histogram, buckets 5 ms … 200 ms), `fs_scoring_latency_seconds{stage}`, `fs_feature_latency_seconds{source}`, `fs_decisions_total{tier,decision,channel,fallback}`, `fs_kafka_consumer_lag{topic,group}`, `fs_spool_depth`, `fs_alert_queue_depth{tier}`, `fs_alert_timeout_release_total{channel}`, `fs_review_duration_seconds`, `fs_false_positive_rate`, `fs_feature_psi{feature}`, `fs_model_version_info{alias,version}`, `fs_model_auc_roc{alias}`, `fs_model_label_coverage{alias}` (these three amended by ADR 0091), `fs_redis_hit_ratio`, `fs_db_pool_in_use`. OpenTelemetry traces from edge to scorer to Kafka consumers with trace ID stored on the ScoringResult. Logs: JSON, PII-redacting processors in both languages, with tests proving redaction. Alert rules implement every SRS 8.2 threshold plus D-10 timeout-release alert. Runbooks in `docs/runbooks/` for each page-worthy alert.
 
 ### E.11 Infrastructure and CI/CD
 
@@ -752,11 +752,12 @@ These are the standards the Principal Reviewer enforces. "It works" is not the b
 **Docs and traceability**
 - [ ] Traceability rows updated with real evidence (commands, artifact paths, and — after merge — commit SHA).
 - [ ] ADRs written for any deviation; module READMEs and runbooks updated.
+- [ ] For every claim that a property is tested (a traceability row, a gate criterion, a contract invariant), the reviewer asks: would the named test fail if the code it claims to prove were deleted? Each claim that does not pass says so in those terms ("deleting X would not fail any test"); none is accepted on the test's name, its presence or a green run.
 
 ### I.3 Milestone-level review (before tagging `m<N>-complete`)
 
 1. Check out `main` at the merge commit into a **clean worktree** (`git worktree add ../fs-review-mN main`), run the full milestone gate from scratch with no caches, and compare results with the numbers claimed.
-2. Walk every requirement in the milestone's scope in the traceability matrix; open the test for each and confirm it asserts the criterion.
+2. Walk every requirement in the milestone's scope in the traceability matrix; open the test for each and confirm it asserts the criterion, and that it would fail if the code meeting the criterion were deleted (the deletion standard, lab notebook 2026-10-17). Report the count of rows proved in full, in part and not at all; a gap is closed by a test or carried to the backlog row by row, never by rewording.
 3. Cross-component review: contracts between Java, Python, Kafka and front-end still agree (contract tests green; schemas identical to generated code).
 4. Threat-model delta: update `docs/security/threat_model.md` for new components or data flows.
 5. Architecture fitness: latency budget table (C.2) re-measured if the hot path changed; dependency graph and module boundaries unchanged or ADR-documented.
@@ -780,7 +781,7 @@ Date: <UTC>   Branch/commit: <sha>   Requirements: <IDs>   Defects: <D-xx>
 Verdict: APPROVED | APPROVED_WITH_MINORS | CHANGES_REQUIRED
 
 ## Checks re-run (command → result)
-## Mutation spot checks (what was broken → which test failed)
+## Deletion checks (code deleted → which test failed, or none; one line per claimed-tested row in scope)
 ## Findings
 | # | Severity | Location | Finding | Required action | Status |
 ## Evidence reproduced (claimed vs measured)

@@ -1,0 +1,6 @@
+# evidence-commit: 0ac21d2533c01a561cb318baa30bf5fc8a1f971f
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_dataset.cli report dataset/output/bench1m --seed 20260917 --rows 1000000
+# exit: 0
+
+wrote /home/marius/fraudshield/dataset/realism_report.md

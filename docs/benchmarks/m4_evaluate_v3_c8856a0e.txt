@@ -1,0 +1,60 @@
+# evidence-commit: 03b9064c9bd5946839585c400bf6fa9105b806ed
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_ml.cli evaluate dataset/output/bench1m --packs dataset/output/packs.json --split dataset/output/split.json --corpus-rows 560000 --train-rows 9000 --test-rows 6000
+# exit: 0
+
+computing 38 features for 15000 rows...
+  500/15000 rows  10/s  ~25.2 min left
+  1000/15000 rows  10/s  ~24.0 min left
+  1500/15000 rows  9/s  ~26.1 min left
+  2000/15000 rows  8/s  ~26.1 min left
+  2500/15000 rows  8/s  ~26.0 min left
+  3000/15000 rows  8/s  ~24.8 min left
+  3500/15000 rows  8/s  ~23.7 min left
+  4000/15000 rows  8/s  ~22.5 min left
+  4500/15000 rows  8/s  ~22.0 min left
+  5000/15000 rows  8/s  ~21.2 min left
+  5500/15000 rows  8/s  ~20.4 min left
+  6000/15000 rows  8/s  ~19.5 min left
+  6500/15000 rows  8/s  ~18.5 min left
+  7000/15000 rows  8/s  ~17.6 min left
+  7500/15000 rows  8/s  ~16.6 min left
+  8000/15000 rows  8/s  ~15.5 min left
+  8500/15000 rows  7/s  ~14.5 min left
+  9000/15000 rows  7/s  ~13.4 min left
+  9500/15000 rows  7/s  ~12.3 min left
+  10000/15000 rows  7/s  ~11.1 min left
+  10500/15000 rows  8/s  ~10.0 min left
+  11000/15000 rows  7/s  ~9.0 min left
+  11500/15000 rows  7/s  ~7.9 min left
+  12000/15000 rows  7/s  ~6.8 min left
+  12500/15000 rows  7/s  ~5.6 min left
+  13000/15000 rows  7/s  ~4.5 min left
+  13500/15000 rows  7/s  ~3.4 min left
+  14000/15000 rows  7/s  ~2.2 min left
+  14500/15000 rows  8/s  ~1.1 min left
+  15000/15000 rows  8/s  ~0.0 min left
+MODEL ON D-07's PUBLISHED SPLIT — fitted on the train period, scored on the test
+period, embargo excluded. Not tuned and not calibrated: the validation and calibration
+periods are identified and deliberately unused.
+
+  split                        train < 2025-08-25 05:24 <= validation (calibration from 2025-09-26 13:13) < 2025-10-21 22:02 <= embargo < 2025-10-28 22:02 <= test
+  features trained on          38 (the computable ones, never 44)
+  corpus rows scanned          560000
+  train rows / fraud           9000 / 66 (0.733%)
+  test rows / fraud            6000 / 63 (1.050%)
+
+  best single feature          0.871  (velocity_ratio_1h_vs_30d, defined on every row)
+  best trivial rule            0.658  (amount_log1p)
+  model AUC                    0.986 +/-0.020
+  MARGIN OVER THE FEATURE      +0.115
+  MARGIN OVER THE TRIVIAL RULE +0.329
+  recall at 1% FPR             0.873
+
+  strongest feature of any     0.871  (velocity_ratio_1h_vs_30d)
+  ...defined on                100.0% of held-out rows (6000 rows, 63 fraud)
+
+
+  TRAINED ON THE LAST 235 DAYS of the train period, not all
+  of it: the corpus is bounded and the feature pass is its cost. A figure from here is
+  comparable with the gates in its split and not in its training volume.

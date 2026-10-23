@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Gitleaks scan of every file that could be committed: tracked files plus untracked files that are
+# not git-ignored, as they are in the working tree (ADR 0019).
+#
+# `gitleaks dir .` would also read git-ignored local secrets such as .env and .demo-credentials,
+# which exist precisely so that credentials stay out of git; flagging them would make `make ci`
+# fail after `make env` or `make seed-demo`. Committed history is scanned separately
+# (`gitleaks git`), and the pre-commit hook scans staged changes, so an ignored file that is
+# force-added is still caught.
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+copy=$(mktemp -d)
+trap 'rm -rf "$copy"' EXIT
+
+# Deleted-but-tracked files are skipped; tar reads the NUL-separated list verbatim.
+git ls-files -z --cached --others --exclude-standard \
+  | while IFS= read -r -d '' path; do [[ -f "$path" ]] && printf '%s\0' "$path"; done \
+  | tar --null --no-recursion -T - -cf - \
+  | tar -xf - -C "$copy"
+
+# Scan from inside the copy so reported paths, and the anchored allowlist paths, stay relative.
+cd "$copy"
+"$root/tools/bin/gitleaks" dir --config "$root/.gitleaks.toml" --redact --no-banner --exit-code 1 .

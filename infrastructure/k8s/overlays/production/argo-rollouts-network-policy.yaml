@@ -1,0 +1,14 @@
+# The Argo Rollouts controller runs in its own namespace (argo-rollouts, cluster prerequisite) and
+# queries this namespace's Prometheus for the canary analysis.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-prometheus-from-argo-rollouts
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: argo-rollouts}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: argo-rollouts}}
+      ports: [{protocol: TCP, port: 9090}]

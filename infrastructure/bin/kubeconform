@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Pinned, checksum-verified kubeconform launcher: validates rendered manifests against pinned schemas (Apache-2.0).
+# Trust model and cache layout: infrastructure/bin/lib/pinned.sh.
+set -eu
+. "$(dirname "$0")/lib/pinned.sh"
+pinned_exec kubeconform "0.8.0" \
+  "https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz" \
+  "9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883" \
+  "kubeconform" \
+  "457722b36e98d7bdbc91525e594951ef5d7ea3a29da2d13b9b28a2fb8a5097b7" \
+  -- "$@"

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:notification-customer",
+  "title": "fs.notifications.customer payload — an intent, not a message (D-25, D-43)",
+  "type": "object",
+  "required": [
+    "notification_id",
+    "account_token",
+    "template_key",
+    "locale",
+    "parameters",
+    "channel",
+    "verification_link_allowed"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "notification_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "account_token": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "SMS"
+      ]
+    },
+    "template_key": {
+      "type": "string",
+      "pattern": "^sms\\.[a-z_]+$"
+    },
+    "locale": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Locale"
+    },
+    "auto_block_event_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "verification_link_allowed": {
+      "type": "boolean",
+      "description": "Required so a missing value can never be read as allowed. False when self-service unblock is disabled (D-25). When true, the notification service mints the single-use verification link at send time; the link is never in the event."
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "masked_account": {
+          "type": "string",
+          "pattern": "^\\*{3,}[0-9A-Za-z]{2,4}$"
+        },
+        "amount": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Money"
+        },
+        "local_time": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9] [A-Z]{3,4}$",
+          "description": "24-hour local time with the zone abbreviation (E.7, D-43), e.g. 10:15 CAT"
+        },
+        "reference_code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{6,10}$"
+        }
+      },
+      "required": [
+        "masked_account",
+        "amount",
+        "local_time",
+        "reference_code"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "template_key": {
+            "const": "sms.auto_block"
+          }
+        },
+        "required": [
+          "template_key"
+        ]
+      },
+      "then": {
+        "required": [
+          "auto_block_event_id"
+        ]
+      }
+    }
+  ]
+}

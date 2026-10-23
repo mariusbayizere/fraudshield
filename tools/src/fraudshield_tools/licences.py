@@ -69,22 +69,191 @@ DENIED = frozenset(
     }
 )
 KNOWN = PERMISSIVE | DEV_ONLY | DENIED
-ALLOWED = {"runtime": PERMISSIVE, "dev": PERMISSIVE | DEV_ONLY}
+# Weak copyleft allowed at runtime for unmodified third-party binaries only (ADR 0020): the ASF
+# "Category B" position. Spring Boot's logging and Jakarta APIs are EPL-2.0 (or dual-licensed).
+RUNTIME_WEAK_COPYLEFT = frozenset({"EPL-2.0"})
+ALLOWED = {"runtime": PERMISSIVE | RUNTIME_WEAK_COPYLEFT, "dev": PERMISSIVE | DEV_ONLY}
 # SPDX exceptions that do not change the base licence's acceptability.
 ALLOWED_WITH_EXCEPTIONS = frozenset({"LLVM-exception"})
 
 # Reviewed, version-pinned decisions where metadata is missing or ambiguous; an upgrade of the
 # package removes the exception and forces a new review. Value: (SPDX expression, reason).
 EXCEPTIONS: dict[str, tuple[str, str]] = {
+    "python:pg8000@1.31.5": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License'; dist-info/licenses/LICENSE is headed 'BSD 3-Clause "
+        "License' (verified 2026-09-23). The scorer's PostgreSQL driver for the feature store's "
+        "database fallback (ADR 0062 point 6)",
+    ),
+    "python:scramp@1.4.17": (
+        "MIT-0",
+        "the classifier names 'MIT No Attribution License (MIT-0)' in words the matcher does not "
+        "map; the LICENSE file is the MIT No Attribution text (verified 2026-09-23). pg8000's "
+        "SCRAM authentication",
+    ),
+    "python:python-dateutil@2.9.0.post0": (
+        "Apache-2.0 AND BSD-3-Clause",
+        "metadata says 'Dual License' with both classifiers; the LICENSE file states that the "
+        "BSD 3-Clause licence applies to all code, even that also covered by Apache 2.0, so both "
+        "apply and both are permissive (verified 2026-09-23). pg8000's dependency",
+    ),
     "python:nodeenv@1.10.0": (
         "BSD-3-Clause",
         "metadata says only 'BSD'; dist-info/licenses/LICENSE is the 3-clause text with the "
         "non-endorsement clause (verified 2026-09-17)",
     ),
+    "python:jsonschema-path@0.5.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the "
+        "Apache License, Version 2.0 text (verified 2026-09-17)",
+    ),
+    "python:h3@4.5.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License', which is ambiguous between 1.0, 1.1 and "
+        "2.0, and there is no License-Expression. The METADATA License field carries the full "
+        "licence text headed 'Apache License, Version 2.0', and "
+        "dist-info/licenses/LICENSE is the same text (verified 2026-09-19). First runtime "
+        "dependency of fraudshield-ml; see ADR 0009's 2026-09-19 amendment",
+    ),
+    "python:pathable@0.6.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the "
+        "Apache License, Version 2.0 text (verified 2026-09-17)",
+    ),
+    "python:openapi-schema-validator@0.9.0": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License'; dist-info/licenses/LICENSE is headed "
+        "'BSD 3-Clause License' with the non-endorsement clause (verified 2026-09-17)",
+    ),
+    "maven:ch.qos.logback:logback-classic@1.5.38": (
+        "EPL-2.0 OR LGPL-2.1-only",
+        "POM lists EPL-2.0 and LGPL-2.1-only as separate entries; LICENSE.txt at tag v_1.5.38 says "
+        "dual-licensed 'per the licensee's choosing' (verified 2026-09-17)",
+    ),
+    "maven:ch.qos.logback:logback-core@1.5.38": (
+        "EPL-2.0 OR LGPL-2.1-only",
+        "same project and licence file as logback-classic 1.5.38 (verified 2026-09-17)",
+    ),
+    "maven:jakarta.annotation:jakarta.annotation-api@3.0.0": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
+        "SPDX 'EPL-2.0 OR GPL-2.0-only with Classpath-exception-2.0' (verified 2026-09-17)",
+    ),
+    "maven:jakarta.mail:jakarta.mail-api@2.1.5": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EDL 1.0', 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
+        "SPDX 'EPL-2.0 OR GPL-2.0-only with Classpath-exception-2.0'. Runtime dependency of the "
+        "M7 staff mailer via spring-boot-starter-mail; allowed by ADR 0020 (verified 2026-09-22)",
+    ),
+    "maven:org.eclipse.angus:angus-mail@2.0.5": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EDL 1.0', 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
+        "SPDX 'EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0'. Jakarta Mail implementation "
+        "used by the M7 staff mailer; allowed by ADR 0020 (verified 2026-09-22)",
+    ),
+    "maven:org.hdrhistogram:HdrHistogram@2.2.2": (
+        "BSD-2-Clause",
+        "Offered as 'CC0-1.0 OR BSD-2-Clause': the POM lists 'Public Domain, per Creative Commons "
+        "CC0' and 'BSD-2-Clause', and the jar's META-INF/LICENSE.txt releases the code to the "
+        "public domain under CC0 and also grants the BSD 2-Clause License text. The project "
+        "ELECTS BSD-2-Clause (owner decision 2026-09-23). Runtime dependency of "
+        "micrometer-registry-prometheus, the API's metrics (ADR 0060) (verified 2026-09-23)",
+    ),
+    "maven:jakarta.persistence:jakarta.persistence-api@3.2.0": (
+        "BSD-3-Clause",
+        "Offered as 'EPL-2.0 OR BSD-3-Clause': the POM lists 'Eclipse Distribution License v. 1.0' "
+        "and 'Eclipse Public License v. 2.0', and the jar's META-INF/NOTICE.md declares that SPDX "
+        "expression (EDL 1.0 is the BSD 3-Clause text). The project ELECTS BSD-3-Clause, the "
+        "permissive option (owner decision 2026-09-22). Runtime API of the JPA persistence layer "
+        "(ADR 0071, and ADR 0068 for M6); ADR 0020 (verified 2026-09-22)",
+    ),
+    "maven:jakarta.transaction:jakarta.transaction-api@2.0.1": (
+        "EPL-2.0",
+        "Offered as 'EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0': the POM lists 'EPL 2.0' and "
+        "'GPL2 w/ CPE', and the jar's META-INF/NOTICE.md declares that SPDX expression. The "
+        "project ELECTS EPL-2.0, used unmodified as a runtime dependency (ADR 0020 weak-copyleft "
+        "rule; owner decision 2026-09-22). Required by hibernate-core for the JPA persistence "
+        "layer (ADR 0071, and ADR 0068 for M6) (verified 2026-09-22)",
+    ),
     "maven:com.tngtech.archunit:archunit@1.5.0": (
         "Apache-2.0 AND BSD-3-Clause",
         "POM declares Apache-2.0 and 'BSD'; the BSD part is shaded ASM, whose bundled "
         "asm.license is the 3-clause text (verified 2026-09-17)",
+    ),
+    "python:xgboost@3.0.2": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License', ambiguous between versions and there is "
+        "no License-Expression; no LICENSE file ships in the wheel's dist-info. Confirmed against "
+        "the tagged source (github.com/dmlc/xgboost, tag v3.0.2, LICENSE) on 2026-09-22: the "
+        "Apache License, Version 2.0 (C-6, first runtime dependency of the ml/pyproject.toml "
+        "ensemble baseline). The expression is xgboost's own code. The manylinux_2_28_x86_64 "
+        "wheel also carries, inside libxgboost.so, 323,896,200 bytes of compiled CUDA device code "
+        "and a statically linked CUDA runtime (NVIDIA's CUDA EULA, not Apache-2.0), and bundles "
+        "libgomp (GPL-3.0-or-later WITH GCC-exception-3.1), with no licence file for either; the "
+        "manylinux2014 wheel is CPU-only (read 2026-10-17). Whether the image keeps the CUDA "
+        "wheel is M9's decision (docs/parallel/M9_updates.md, From M7)",
+    ),
+    "python:scipy@1.18.1": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License'; dist-info/licenses/LICENSE.txt is headed 'Copyright "
+        "(c) 2001-2002 Enthought, Inc. 2003, SciPy Developers' with the 3-clause disclaimer, "
+        "confirmed against the tagged source (github.com/scipy/scipy, tag v1.18.1) on 2026-09-22. "
+        "A transitive dependency of xgboost and lightgbm, not declared directly. The expression "
+        "is scipy's own code: the Linux wheel also bundles, in scipy.libs/, OpenBLAS "
+        "(BSD-3-Clause), LAPACK (BSD-3-Clause-Open-MPI), the GCC runtime libgfortran "
+        "(GPL-3.0-or-later WITH GCC-exception-3.1) and libquadmath (LGPL-2.1-or-later, dynamically "
+        "linked), each listed with its text in dist-info/LICENSE.txt (read 2026-10-17). A runtime "
+        "dependency, so an ML image redistributes them: allowed on condition that their notices "
+        "travel with the image (owner decision 2026-10-17; acceptance criterion in "
+        "docs/parallel/M9_updates.md)",
+    ),
+    "python:flatbuffers@25.12.19": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License' and the wheel ships no licence file; every "
+        "one of the ten installed modules carries Google's 'Licensed under the Apache License, "
+        "Version 2.0' header, read 2026-09-22. A transitive dependency of onnxruntime",
+    ),
+    "python:skl2onnx@1.20.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the full "
+        "Apache License 2.0 text and NOTICE credits Microsoft, both read 2026-09-22. A transitive "
+        "dependency of onnxmltools",
+    ),
+    "python:cloudpickle@3.1.2": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License' and the policy does not read the old-style 'License: "
+        "BSD-3-Clause' field; dist-info/licenses/LICENSE is the full 3-clause text (copyright "
+        "Cloudpickle contributors, Regents of the University of California, PiCloud), read in "
+        "full on 2026-09-22 from the installed wheel, not checked against upstream source. A "
+        "transitive dependency of joblib via scikit-learn, not declared directly",
+    ),
+    "python:nvidia-nccl-cu12@2.31.2": (
+        "BSD-3-Clause",
+        "the wheel's own License-Expression field says 'LicenseRef-NVIDIA-Proprietary', which is "
+        "wrong: dist-info/licenses/License.txt is the 3-clause BSD text for NCCL (NVIDIA "
+        "CORPORATION / Lawrence Berkeley National Laboratory / U.S. Department of Energy, DOE "
+        "subcontract 7078610), matching the upstream project's own licensing summary "
+        "(github.com/NVIDIA/nccl, LICENSE.txt: 'parts of the project retain their original BSD "
+        "license'), confirmed 2026-09-22. A transitive, platform-conditional dependency of "
+        "xgboost's manylinux_2_28 wheel (`platform_system == 'Linux' and platform_machine != "
+        "'aarch64'`) for its optional GPU code path. libxgboost.so loads NCCL with dlopen, so "
+        "`ldd` showing no NVIDIA library proves nothing; what keeps it unloaded is that this "
+        "project trains CPU-only (missing=nan, nthread=1, no device='cuda' anywhere in the tree), "
+        "so the wheel is present but never loaded. Recorded "
+        "as BSD-3-Clause on the text actually bundled, not on the misleading declared field, "
+        "which is the same 'read the file, not the label' rule every other exception here uses. "
+        "License.txt also names files from the NVTX project and points to github.com/NVIDIA/NVTX "
+        "for their licence, Apache-2.0 WITH LLVM-exception, whose text is not in the wheel (read "
+        "2026-10-17). "
+        "Redistribution position (owner decision 2026-10-17): an ML image built from the lock "
+        "carries the wheel, so it either carries License.txt and NVTX's notice or leaves NCCL out, "
+        "which CPU-only training allows (acceptance criterion in docs/parallel/M9_updates.md)",
+    ),
+    "python:sortedcontainers@2.4.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; METADATA 'License: Apache 2.0' and "
+        "dist-info/LICENSE is the Apache License, Version 2.0 notice (verified 2026-09-22). Dev "
+        "only, via fakeredis (M5 unit tests without Docker)",
     ),
 }
 
@@ -93,9 +262,14 @@ _NAME_PATTERNS: tuple[tuple[str, str], ...] = (
         r"^(the )?apache (software )?licen[cs]e,? (version )?2(\.0)?$|^apache[- ]2(\.0)?$",
         "Apache-2.0",
     ),
-    (r"^mit( licen[cs]e)?$|^expat$|^permission is hereby granted, free of charge", "MIT"),
+    (r"^(the )?mit( licen[cs]e)?$|^expat$|^permission is hereby granted, free of charge", "MIT"),
+    # The Eclipse Distribution License 1.0 is the BSD 3-Clause text (SPDX lists it as BSD-3-Clause).
+    (r"^(eclipse distribution licen[cs]e,? ?(- )?v(ersion)? ?1\.0|edl 1\.0)$", "BSD-3-Clause"),
     (r"^(bsd[- ]2[- ]clause|simplified bsd)( licen[cs]e)?$", "BSD-2-Clause"),
-    (r"^(bsd[- ]3[- ]clause|new bsd|modified bsd|revised bsd)( licen[cs]e)?$", "BSD-3-Clause"),
+    (
+        r"^(bsd[- ]3[- ]clause|3[- ]clause bsd|new bsd|modified bsd|revised bsd)( licen[cs]e)?$",
+        "BSD-3-Clause",
+    ),
     (r"^isc( licen[cs]e)?( \(iscl\))?$", "ISC"),
     (r"^(psf|python software foundation)( licen[cs]e)?( 2\.0)?$", "PSF-2.0"),
     (r"^mozilla public licen[cs]e,? (version )?2\.0( \(mpl 2\.0\))?$", "MPL-2.0"),
@@ -421,6 +595,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR {problem}", file=sys.stderr)
     counts = {scope: sum(d.scope == scope for d in dependencies) for scope in ("runtime", "dev")}
     print(f"licences: {len(dependencies)} dependencies {counts}, {len(problems)} violations")
+    # The Python runtime scope was empty from M0 until 2026-09-19, so this check passed on every
+    # commit through three milestones while carrying no information: an empty input satisfies
+    # almost any predicate. The first real input failed it. An empty scope is therefore reported
+    # as a warning in its own right, so a green run over nothing cannot be mistaken for a green
+    # run over something (ADR 0009, 2026-09-19 amendment).
+    for scope, count in counts.items():
+        if count == 0:
+            print(
+                f"WARNING the {scope} scope is empty, so this run checked nothing for it; "
+                "a pass here means 'had nothing to check', not 'checked and was clean'",
+                file=sys.stderr,
+            )
     return 1 if problems else 0
 
 

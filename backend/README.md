@@ -12,9 +12,14 @@ ArchUnit tests enforce this per module.
 | Module | Status | Milestone |
 |---|---|---|
 | `common` | Money and ISO 4217 minor units (D-43) | M0 |
-| `ingest`, `decision`, `rules` | planned | M6 |
-| `auth`, `staff-api` | planned | M7 |
-| `notify`, `sar`, `verify-web` | planned | M6–M8 |
+| `rules` | Custom-rule DSL (FR-05-05) | M6 |
+| `decision` | Decision engine, holds, freeze, breaker, spool, adapters | M6 |
+| `ingest` | Ingestion API and the API application's composition root, which assembles M7's modules (ADR 0073) | M6, assembly M7 |
+| `notify` | Customer SMS, verification, webhooks | M6 |
+| `audit` | Hash-chained audit writer, tenant transactions, signed anchors, `fraudshield audit verify` | M7 |
+| `auth` | Staff sign-in, sessions, lockout, Google sign-in, API keys, contract-driven authorisation | M7 |
+| `admin` | Staff accounts, approvals, office IP allowlist, API keys, audit search | M7 |
+| `sar`, `verify-web` | planned | M8 |
 
 **Test.** `./mvnw -B -ntp verify` runs Checkstyle (Google style), JUnit 5 (property cases from seeded generators; jqwik removed, ADR 0009), SpotBugs with
 FindSecBugs and the JaCoCo line-coverage gate (≥ 85%).

@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Pinned, checksum-verified amtool launcher: checks the Alertmanager configuration and routing (Apache-2.0).
+# Trust model and cache layout: infrastructure/bin/lib/pinned.sh.
+set -eu
+. "$(dirname "$0")/lib/pinned.sh"
+pinned_exec amtool "0.34.0" \
+  "https://github.com/prometheus/alertmanager/releases/download/v0.34.0/alertmanager-0.34.0.linux-amd64.tar.gz" \
+  "19c75a11d8c03dc4ade7abdbddfb3a8f28c9e7b000d0849cda0cd71dffd74a03" \
+  "alertmanager-0.34.0.linux-amd64/amtool" \
+  "a42bdb03d527f4dc1045e105740944a2f7747838c988dc7a3138f1d4a5c626a0" \
+  -- "$@"

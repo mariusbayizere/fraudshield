@@ -1,0 +1,27 @@
+{
+  "description": "Customer SMS templates (E.7, D-25, D-43). GSM-7 only and one 160-septet segment at the worst-case lengths asserted by SmsCatalogueTest (a 17-character amount, a 16-character E.164 number and a verification link of at most SmsCatalogue.MAX_LINK_LENGTH characters). No template asks for a PIN or password. status is machine_draft until a native speaker reviews the text and it is marked reviewed (D-43); none has been reviewed.",
+  "templates": {
+    "sms.auto_block": {
+      "en": {
+        "status": "machine_draft",
+        "link": "{amount} {currency} from {account} blocked {time}. Ref {ref}. Yours? {link} Help {phone}",
+        "no_link": "Blocked {amount} {currency} from {account} at {time}. Ref {ref}. To unblock, call {phone} or visit a branch or agent."
+      },
+      "fr": {
+        "status": "machine_draft",
+        "link": "{amount} {currency} du {account} bloqué {time}. Réf {ref}. Vous? {link} Aide {phone}",
+        "no_link": "Bloqué {amount} {currency} du compte {account} à {time}. Réf {ref}. Pour débloquer, appelez {phone} ou allez en agence."
+      },
+      "rw": {
+        "status": "machine_draft",
+        "link": "{amount} {currency} kuri {account} byahagaze {time}. Ref {ref}. Ni wowe? {link} Hamagara {phone}",
+        "no_link": "Twahagaritse {amount} {currency} kuri {account} saa {time}. Ref {ref}. Hamagara {phone} cyangwa ujye ku ishami."
+      },
+      "sw": {
+        "status": "machine_draft",
+        "link": "{amount} {currency} ya {account} imezuiwa {time}. Kumb {ref}. Ni wewe? {link} Msaada {phone}",
+        "no_link": "Imezuiwa {amount} {currency} kutoka {account} saa {time}. Kumb {ref}. Kufungua, piga {phone} au tembelea tawi."
+      }
+    }
+  }
+}

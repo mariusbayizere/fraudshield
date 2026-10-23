@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:decision-final",
+  "title": "fs.decisions.final payload and decision.final webhook body (D-14)",
+  "description": "Identical to the OpenAPI FinalDecision schema (ADR 0011 section 9); contract tests compare the two after resolving references. Receivers apply a state only when its decision_sequence is greater than the last applied for the transaction.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "transaction_id",
+    "decision_sequence",
+    "decision",
+    "final",
+    "decided_at",
+    "decided_by",
+    "reason_codes",
+    "review_deadline_at",
+    "supersedes_decision"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "transaction_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "decision_sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "decision": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/FinalDecisionValue"
+    },
+    "final": {
+      "type": "boolean"
+    },
+    "decided_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "decided_by": {
+      "type": "string",
+      "enum": [
+        "MODEL",
+        "ANALYST",
+        "TIMEOUT_POLICY",
+        "CUSTOMER_VERIFICATION",
+        "SENIOR_OVERRIDE"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "$ref": "urn:fraudshield:kafka:common#/$defs/ReasonCode"
+      }
+    },
+    "review_deadline_at": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "supersedes_decision": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/FinalDecisionValue"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "HOLD"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "final": {
+            "const": false
+          },
+          "review_deadline_at": {
+            "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "final": {
+            "const": true
+          },
+          "review_deadline_at": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision_sequence": {
+            "const": 1
+          }
+        },
+        "required": [
+          "decision_sequence"
+        ]
+      },
+      "then": {
+        "properties": {
+          "decided_by": {
+            "const": "MODEL"
+          },
+          "supersedes_decision": {
+            "type": "null"
+          },
+          "decision": {
+            "enum": [
+              "APPROVE",
+              "DECLINE",
+              "HOLD"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "decided_by": {
+            "not": {
+              "const": "MODEL"
+            }
+          },
+          "supersedes_decision": {
+            "$ref": "urn:fraudshield:kafka:common#/$defs/FinalDecisionValue"
+          },
+          "decision": {
+            "not": {
+              "const": "HOLD"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

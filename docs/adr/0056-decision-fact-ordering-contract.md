@@ -1,0 +1,81 @@
+# 0056: The decision-fact ordering contract governs every reader that depends on another writer
+
+- **Status:** Accepted (owner decision, 2026-09-24: options 1 and 3 of `docs/parallel/M6_updates.md`,
+  "SMS race: stopped for the owner"; the contract reviewed sound on its own before implementation)
+- **Date:** 2026-09-24
+- **Decided by:** the owner (options, bound, process); the author (the contract's mechanisms,
+  reviewed five times)
+- **Requirements affected:** FR-03-04, D-25, NFR-REL-01, FR-01-03 (the idempotency 503)
+- **ADRs referenced:** 0057 (superseded), 0064 (point 5 amended), 0067, 0012
+
+## Context
+
+The decision service writes each decision once, to a durable spool. Two independent drainers carry
+it to Kafka and to PostgreSQL. The customer SMS consumer reads Kafka but needs PostgreSQL's auto-block
+row. Four fix rounds, each aimed at one observed failure, introduced a new MAJOR each (reviews 11 to 13). The
+owner then required the ordering to be written down and reviewed on its own before any further fix.
+
+## Decision
+
+`docs/architecture/decision-fact-ordering.md` is the contract. It was reviewed sound in its fifth
+draft (reviews `docs/reviews/M6/m6-decision-2026-09-24-contract-1.md` to `-contract-5.md`), and the
+code implements it. In short:
+
+1. **Ids derive from the submission.** The auto-block and notification ids are name-based UUIDs of
+   (institution, transaction, request fingerprint). A duplicate decision of the same submission is
+   then the same notification. A different body for the same transaction id can never reach the kept
+   decision's block.
+2. **The intent carries its transaction** as the Kafka header `fs-transaction-id`. The frozen
+   payload is unchanged.
+3. **The consumer classifies each intent from one snapshot**, in one SQL statement, before any side
+   effect:
+   - already handled: not sent;
+   - resolved: not sent;
+   - the normal case: sent, with link eligibility from the kept decision's REQUESTED row, failing
+     closed;
+   - not the kept decision's: dead-lettered at once;
+   - parent not written yet: waits.
+4. **Waiting is bounded per partition by a leaky budget.** The bound is 10 minutes and a full budget
+   drains in 60, both ASSUMED and configurable. The budget survives rebalances in the committed
+   offset's metadata. Re-reads pause only their partition. An intent the budget cannot cover is
+   dead-lettered for replay.
+5. **Dead letters keep their headers.** `DeadLetterReplay` republishes by reason and time window,
+   with no committed group and one copy per event. A replayed intent never waits.
+6. **Ingest answers 503**, not 500, when neither Redis nor PostgreSQL can answer the idempotency
+   claim.
+
+## Consequences
+
+- Each invariant is mapped to the test that proves it in the contract's section 8. Two
+  properties rest on review only: `seekBack` after a commit failure with membership kept, and a
+  lost partition committing nothing. The first version of this ADR said every invariant was tested;
+  the implementation review of `bd48557` showed it was not, and the tests were added.
+- **Carried to M9:**
+  - a replay tool for `PostgresSink`'s dead-letter files (the first step of recovering a lost
+    parent);
+  - packaging `DeadLetterReplay` into the deployable image;
+  - alerts on the WARN and on the DLQ topics' growth;
+  - dashboards on `fs_spool_lag`.
+- **Recommended for a later milestone:** a transactional outbox, publishing the intent from
+  PostgreSQL after its commit. It removes the race for this reader altogether.
+
+## Amendment 1 (2026-10-17, reviewed sound in draft 3)
+
+The second implementation review (`docs/reviews/M6/m6-decision-2026-10-17-implementation-2.md`)
+found that every unchecked exception was retried without bound, that a provider reply which could
+not be read caused repeated sends, and that two test claims were wider than their tests. Drafts 1 and 2
+of the amendment were reviewed on their own and were not sound (`-2026-10-17-amendment-1.md`,
+`-amendment-1-draft-2.md`); draft 3 was sound (`-amendment-1-draft-3.md`), its MINORs and NITs
+applied. The
+contract's sections 12 and 13 now classify every failure of an attempt: an outage of a shared
+dependency is retried without bound; a failure that may be the record's own is dead-lettered as
+`handler_failure` after 10 minutes and 5 attempts (ASSUMED), with that state checkpointed across
+owners, and can be replayed; only data and integrity errors are permanent. Every field read from
+the record is validated before any side effect, and every external call has a timeout. Once the
+provider has been called for a record its result is kept and checkpointed, so a failed outcome write
+never sends again; a dead letter after a send is `outcome_unrecorded` and carries the result, so replaying it
+records the outcome without a send. An `Error` stops the consumer without skipping a record. A malformed `fs-transaction-id` is told apart from an absent one; a reset across a retention
+gap is logged and counted; the consumer's counters are exported. A crash between the provider call
+and the commit that keeps its result is a known gap (`PB-77`), and so is a provider outage ending
+the notice (`PB-79`). Section 8 of the contract, not this ADR,
+says which properties rest on review only or are proved in part.

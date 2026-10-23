@@ -1,0 +1,41 @@
+{
+  "accounts": 5920,
+  "grid_degrees": 0.05,
+  "keys": {
+    "agent": {
+      "component_folding_valid": false,
+      "components": 250,
+      "largest_accounts": 2251,
+      "largest_share": 0.380236,
+      "median_size": 1,
+      "p99_size": 735
+    },
+    "counterparty": {
+      "component_folding_valid": false,
+      "components": 1,
+      "largest_accounts": 5920,
+      "largest_share": 1.0,
+      "median_size": 5920,
+      "p99_size": 5920
+    },
+    "device": {
+      "component_folding_valid": true,
+      "components": 5920,
+      "largest_accounts": 1,
+      "largest_share": 0.000169,
+      "median_size": 1,
+      "p99_size": 1
+    },
+    "geo_cell": {
+      "component_folding_valid": false,
+      "components": 1,
+      "largest_accounts": 5920,
+      "largest_share": 1.0,
+      "median_size": 5920,
+      "p99_size": 5920
+    }
+  },
+  "rows": 1012522,
+  "threshold": 0.1,
+  "tree": "d85385fa43b8a392271135bf226d7053eaab01ce"
+}

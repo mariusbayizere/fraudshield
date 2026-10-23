@@ -1,0 +1,86 @@
+# Alertmanager. The PagerDuty Events API v2 routing keys come from the Secret
+# fraudshield-alertmanager-pagerduty with keys sre, risk and ml, created per environment and
+# never committed (alertmanager.yml reads them as files).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fraudshield-alertmanager
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: fraudshield-alertmanager
+  labels: {app.kubernetes.io/name: fraudshield-alertmanager, app.kubernetes.io/component: monitoring}
+spec:
+  serviceName: fraudshield-alertmanager
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-alertmanager}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: fraudshield-alertmanager, app.kubernetes.io/component: monitoring}
+    spec:
+      serviceAccountName: fraudshield-alertmanager
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.34.0@sha256:690c7b525f4367aa91f73e2f91c632206d32e97c6384bdbf2fb7a861b420340d
+          args:
+            - --config.file=/etc/alertmanager/config/alertmanager.yml
+            - --storage.path=/alertmanager
+            - --cluster.listen-address=
+          ports:
+            - {name: http, containerPort: 9093}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          livenessProbe:
+            httpGet: {path: /-/healthy, port: http}
+          readinessProbe:
+            httpGet: {path: /-/ready, port: http}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/alertmanager/config}
+            - {name: pagerduty, mountPath: /etc/alertmanager/pagerduty, readOnly: true}
+            - {name: data, mountPath: /alertmanager}
+      volumes:
+        - name: config
+          configMap: {name: fraudshield-alertmanager-config}
+        - name: pagerduty
+          secret: {secretName: fraudshield-alertmanager-pagerduty}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraudshield-alertmanager
+  labels: {app.kubernetes.io/name: fraudshield-alertmanager}
+spec:
+  selector: {app.kubernetes.io/name: fraudshield-alertmanager}
+  ports:
+    - {name: http, port: 9093, targetPort: http}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fraudshield-alertmanager
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-alertmanager}

@@ -33,6 +33,13 @@ Without Docker they print `SKIPPED: … requires Docker, verified in CI`; with `
 (CI, Codespaces) a missing daemon fails the run (ADR 0010). Performance numbers used for gates come
 only from a machine recorded in `docs/benchmarks/hardware.md`, never from CI runners.
 
+## Pushing
+
+Push a branch with `tools/bin/safe-push`, not `git push`. It pins HEAD, checks the message of every
+commit the remote lacks and runs eight of CI's governance checks, and pushes that commit only if
+all pass (to rewrite a pushed branch: `--force-with-lease=<branch>:<sha>`). Its header lists what
+it leaves to CI, so read CI at job level after it.
+
 ## Commits
 
 Conventional Commits, imperative subject ≤ 72 characters, body explaining why, with

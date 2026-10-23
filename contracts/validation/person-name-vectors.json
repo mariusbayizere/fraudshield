@@ -1,0 +1,164 @@
+{
+  "description": "Person-name validation vectors shared by the Java and TypeScript validators (ADR 0013). Input is normalised to NFC, then checked: no leading or trailing whitespace; 2-100 code points; parts of Unicode letters and combining marks, each starting with a letter, separated by exactly one space, hyphen, ASCII apostrophe or U+2019. Names are illustrative, not real people.",
+  "min_code_points": 2,
+  "max_code_points": 100,
+  "accept": [
+    {
+      "input": "Ng\u0169g\u0129",
+      "normalised": "Ng\u0169g\u0129",
+      "note": "Kikuyu with u-tilde and i-tilde (precomposed)"
+    },
+    {
+      "input": "Ngu\u0303gi\u0303",
+      "normalised": "Ng\u0169g\u0129",
+      "note": "Same name in decomposed form; NFC recomposes it"
+    },
+    {
+      "input": "H\u00e9l\u00e8ne",
+      "normalised": "H\u00e9l\u00e8ne",
+      "note": "French accents"
+    },
+    {
+      "input": "N'Dri",
+      "normalised": "N'Dri",
+      "note": "ASCII apostrophe"
+    },
+    {
+      "input": "N\u2019Dri",
+      "normalised": "N\u2019Dri",
+      "note": "Typographic apostrophe U+2019"
+    },
+    {
+      "input": "Uwimana-Mukamana",
+      "normalised": "Uwimana-Mukamana",
+      "note": "Hyphenated surname"
+    },
+    {
+      "input": "Jean Bosco",
+      "normalised": "Jean Bosco",
+      "note": "Multiple given names"
+    },
+    {
+      "input": "Marie Claire Uwase",
+      "normalised": "Marie Claire Uwase",
+      "note": "Three parts"
+    },
+    {
+      "input": "Nyiramana",
+      "normalised": "Nyiramana",
+      "note": "Kinyarwanda"
+    },
+    {
+      "input": "Wanjir\u0169",
+      "normalised": "Wanjir\u0169",
+      "note": "Kikuyu"
+    },
+    {
+      "input": "O\u0323la\u0301",
+      "normalised": "\u1eccl\u00e1",
+      "note": "Dot below and acute as combining marks; NFC composes them"
+    },
+    {
+      "input": "Zo\u00eb",
+      "normalised": "Zo\u00eb",
+      "note": "Diaeresis"
+    },
+    {
+      "input": "Al",
+      "normalised": "Al",
+      "note": "Minimum length 2"
+    },
+    {
+      "input": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "normalised": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "note": "Maximum length 100 code points"
+    }
+  ],
+  "reject": [
+    {
+      "input": "",
+      "reason": "LENGTH",
+      "note": "Empty"
+    },
+    {
+      "input": "A",
+      "reason": "LENGTH",
+      "note": "Below minimum"
+    },
+    {
+      "input": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "reason": "LENGTH",
+      "note": "Above maximum"
+    },
+    {
+      "input": "Jean2",
+      "reason": "CHARACTERS",
+      "note": "Digit"
+    },
+    {
+      "input": "Amani\ud83d\ude00",
+      "reason": "CHARACTERS",
+      "note": "Emoji"
+    },
+    {
+      "input": "Ama\u0000ni",
+      "reason": "CHARACTERS",
+      "note": "NUL control character"
+    },
+    {
+      "input": "Ama\u200bni",
+      "reason": "CHARACTERS",
+      "note": "Zero-width space (format character)"
+    },
+    {
+      "input": "Amani\n",
+      "reason": "WHITESPACE",
+      "note": "Trailing newline"
+    },
+    {
+      "input": " Amani",
+      "reason": "WHITESPACE",
+      "note": "Leading space"
+    },
+    {
+      "input": "Amani ",
+      "reason": "WHITESPACE",
+      "note": "Trailing space"
+    },
+    {
+      "input": "Jean  Bosco",
+      "reason": "CHARACTERS",
+      "note": "Double space"
+    },
+    {
+      "input": "Jean\tBosco",
+      "reason": "CHARACTERS",
+      "note": "Tab between parts"
+    },
+    {
+      "input": "-Amani",
+      "reason": "CHARACTERS",
+      "note": "Leading hyphen"
+    },
+    {
+      "input": "Amani-",
+      "reason": "CHARACTERS",
+      "note": "Trailing hyphen"
+    },
+    {
+      "input": "O''Brien",
+      "reason": "CHARACTERS",
+      "note": "Consecutive separators"
+    },
+    {
+      "input": "Amani@x",
+      "reason": "CHARACTERS",
+      "note": "Symbol"
+    },
+    {
+      "input": "\u0301Amani",
+      "reason": "CHARACTERS",
+      "note": "Starts with a combining mark"
+    }
+  ]
+}
