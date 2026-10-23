@@ -322,12 +322,12 @@ job when memory is short, use `SKIP=spotless`, and read that job at job level.
 ### Pushes go through `safe-push`
 
 `tools/bin/safe-push` (`5640dcf`) was only on `m8/frontend-rebase` until 2026-10-23, so this branch
-pushed through the governance checks joined by hand with `&&`, and a failing step outside that
-chain once let a commit and push proceed (the lab notebook, "A check that ran, failed, and did not
-stop the push"). It reached `main` on its own that day (branch `tools/safe-push`: `a2e08c3`, a
-cherry-pick of `5640dcf` without the rest of that branch, and `34520b3`, a note in M8B's scope), and from then on this branch pushes only through it.
-It runs nine of CI's governance checks and leaves pre-commit, gitleaks and the rest to CI, so CI is
-still read at job level after every push.
+pushed through the governance checks joined by hand with `&&`, and a failing step outside that chain
+once let a commit and push proceed (the lab notebook, "A check that ran, failed, and did not stop
+the push"). It reached `main` on its own that day (branch `tools/safe-push`: `a2e08c3`, a
+cherry-pick of `5640dcf` without the rest of that branch, and `34520b3`, a note in M8B's scope), and
+from then on this branch pushes only through it. It runs nine of CI's governance checks and leaves
+pre-commit, gitleaks and the rest to CI, so CI is still read at job level after every push.
 
 ### Identifiers claimed by this branch
 
@@ -404,7 +404,16 @@ record.
 
 **No extra record was seen, so the classifier has had nothing to name yet.** One clean run does not
 retire the +119 of run 39942490462: its cause is still unestablished, and PB-198 stays open on it.
-The run before this one (39956259180, all cases passing) is not counted as evidence: Kafka 4.3
+
+**The tolerance is replaced (2026-10-23).** As written in `prove-harness.sh`, both passing cases now
+fail on any duplicate, any record the harness did not send, any unparsed line, an accepted id with
+no record, a read that does not match the offsets, or a named count that differs from the topic's
+growth; no run had exercised the new verdict when this was written. A duplicate fails even when its
+`event_id` repeats, a re-publish that D-15's at-least-once spool can produce. Late records (sent,
+not counted as accepted) pass, by the owner's decision, but only inside the case's settle window;
+none has yet been seen, since the two such ids of run 39958911822 left no record.
+
+The run before 39958911822 (39956259180, all cases passing) is not counted as evidence: Kafka 4.3
 printed a deprecation warning on stdout ahead of each partition's records, so each partition read
 one line more than its offsets allowed ("read 39 of 38"), and the classifier named those lines one
 foreign record and two duplicates; fixed in `6b3e094`.

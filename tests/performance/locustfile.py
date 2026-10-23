@@ -658,7 +658,8 @@ def _mark_unexecuted(environment: Environment, **_: Any) -> None:
         environment.process_exit_code = EXIT_TASK_RAISED
     ids_out = getattr(environment.parsed_options, "fs_ids_out", "")
     if ids_out:
-        # Report only: a failed write is logged and must not change the run's outcome.
+        # A failed write is logged and does not change Locust's exit status; step 2's records
+        # check then fails the case, since it has no ids to reconcile against.
         try:
             Path(ids_out).write_text(
                 json.dumps({"sent": SENT_IDS, "accepted": ACCEPTED_IDS, "replayed": REPLAYED_IDS})

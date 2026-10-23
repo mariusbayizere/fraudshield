@@ -7,7 +7,9 @@
 #
 #   case                         host                          expected
 #   pass                         the API                       0; requests > 0, no failures,
-#                                                              Kafka grew by what was accepted,
+#                                                              every record on the topic named:
+#                                                              no duplicate, foreign or unparsed
+#                                                              record, every accepted id has one,
 #                                                              >= 60 accepted, every pack
 #                                                              currency among them
 #   wrong-key                    the API                       3 (preflight); nothing sent
@@ -105,8 +107,7 @@ case_records() {
 }
 
 # reconcile <case>: names each of the case's raw records by transaction_id against the ids the
-# harness wrote (PB-198), after any shortfall in reading them. Reports only; the verdict does not
-# depend on it yet.
+# harness wrote (PB-198), after any shortfall in reading them; records_hold judges the result.
 reconcile() {
   local name=$1 shortfall
   shortfall=$(case_records "$out/$name.offsets.before" "$out/$name.offsets.after" \
@@ -233,6 +234,32 @@ rate=1
 
 # accepted_in <currency>: the case's accepted split has at least one ingest in that currency.
 accepted_in() { [[ ",$case_currencies," =~ ,$1=[1-9][0-9]*, ]]; }
+# records_hold <case> <kafka delta> <records text>: the case's raw records, named by
+# transaction_id (PB-198), hold: read completely; no duplicate, no record the harness did not send
+# (foreign) and no unparsed line; every accepted id has its record; and the records named are all
+# the topic grew by. A late record (sent, not counted as accepted) passes, by the owner's decision
+# of 2026-10-23: the harness records an id when its request is about to go, so a request cut off
+# when the run stops is sent and not counted, and run 39958911822 had two such ids (neither left a
+# record, so no late record has yet been seen). Replaces the earlier allowance of up to one record
+# per user above the accepted count, which assumed that cause and could not tell it from a
+# duplicate.
+records_hold() {
+  [[ "$3" != *"READ INCOMPLETE"* && "$3" != *"did not complete"* ]] || return 1
+  python3 - "$out/$1.reconcile.json" "$2" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+classes = result["classes"]
+bad = {kind: classes[kind] for kind in ("duplicate", "foreign", "unparsed") if classes.get(kind)}
+problems = [f"{kind} {count}" for kind, count in bad.items()]
+if result["accepted_without_record"]:
+    problems.append(f"accepted without a record {len(result['accepted_without_record'])}")
+if result["records"] != int(sys.argv[2]):
+    problems.append(f"named {result['records']} records, the topic grew by {sys.argv[2]}")
+if problems:
+    sys.exit("records do not hold: " + "; ".join(problems))
+PY
+}
+
 # split_total: the sum of the case's accepted split.
 split_total() {
   local total=0 part parts
@@ -251,7 +278,7 @@ run_case pass 0 "$key" "$api" -u "$users" -r "$users" -t 60s --fs-user-throughpu
 pass_records=$(reconcile pass) || pass_records="records: reconciliation did not complete"
 verdict pass "Kafka +$case_kafka; $case_accepted accepted ($case_currencies); $pass_records" \
   '(( case_requests > 0 ))' '(( case_failures == 0 ))' \
-  '(( case_kafka >= case_accepted && case_kafka <= case_accepted + users ))' \
+  'records_hold pass "$case_kafka" "$pass_records"' \
   '(( case_accepted >= 60 ))' '(( $(split_total) == case_accepted ))' \
   'accepted_in RWF' 'accepted_in KES' 'accepted_in TZS' 'accepted_in UGX' 'accepted_in CDF' \
   'grep -q "preflight passed" "$out/pass.log"'
@@ -297,16 +324,16 @@ verdict key-revoked-in-run "proxy forwarded $(forwarded "$out/key-revoked-in-run
   '[[ $(forwarded "$out/key-revoked-in-run.counts.json") == "$revoke_after" ]]' \
   'grep -q "KEY REFUSED IN RUN: HTTP 401" "$out/key-revoked-in-run.log"'
 
-# 8. The proxy with no fault passes, so the refusals above are the faults', not the proxy's.
-# (The upper bound in case 1 allows for requests in flight when the run's users are stopped: they
-# reach the API, and Kafka, but not the run's statistics.)
+# 8. The proxy with no fault passes, so the refusals above are the faults', not the proxy's; its
+# records must hold as case 1's do.
 proxy 18085 "$out/proxy-control.counts.json"
 run_case proxy-control 0 "$key" http://127.0.0.1:18085 -u "$users" -r "$users" -t 20s \
   --fs-user-throughput "$rate" --fs-ids-out "$out/proxy-control.ids.json"
 control_records=$(reconcile proxy-control) ||
   control_records="records: reconciliation did not complete"
 verdict proxy-control "proxy forwarded $(forwarded "$out/proxy-control.counts.json"); accepted ($case_currencies); Kafka +$case_kafka; $control_records" \
-  '(( case_requests > 0 ))' '(( case_failures == 0 ))'
+  '(( case_requests > 0 ))' '(( case_failures == 0 ))' \
+  'records_hold proxy-control "$case_kafka" "$control_records"'
 
 # 9. The harness with the shape defect restored sends nothing; that must fail, not exit 0.
 case_harness=$(mutant shape-stops \

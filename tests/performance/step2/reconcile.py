@@ -19,8 +19,8 @@ classes each record:
   the read count alone can still balance a junk line against a missing record, which then shows
   here as unparsed and as an accepted id without a record.
 
-It also lists the accepted ids with no record. It reports and exits 0 whatever it finds: the case's
-verdict is unchanged until a run has shown what the extra records are.
+It also lists the accepted ids with no record. It reports and exits 0 whatever it finds; the case's
+verdict is judged from its output by ``records_hold`` in ``prove-harness.sh``.
 
 Usage: reconcile.py <ids.json> <records.tsv> <out.json>; prints a one-line summary.
 """

@@ -101,15 +101,19 @@ through the fault proxy with no fault), six refusals with exit 3 or 4, and two m
 the harness with one of the defects below restored, that must exit 5 and 6. Each asserts its exact
 exit status and what reached the API (the Kafka topic `fs.transactions.raw`, or the request count of
 `step2/fault_proxy.py`, which injects the faults the correctly configured stack cannot produce and
-forwards everything else to the real API). The two passing cases also try to name each record in
-their window on the topic (PB-198): with `--fs-ids-out` the harness writes the `transaction_id`s it
-sent, accepted and replayed, and `prove-harness.sh` reads the case's records by partition and offset
-and `step2/reconcile.py` classes each as accepted, late (sent, not counted as accepted), a duplicate
-of an earlier record, or foreign. A short read of a partition is reported as such. Records landing
-after the case's settle window fall into the next case's. The classes are reported in the summary
-and do not yet change a case's verdict. Step 2 found three defects, all fixed, in a harness that had never run: the plateau shape stopped every run without
-`--fs-target-users` at once, with no request and exit status 0 (observed with Locust 2.43.4);
-`response.js` does not exist on Locust's responses; and the pacing function was assigned to the
+forwards everything else to the real API). The two passing cases also name each record in their
+window on the topic (PB-198): with `--fs-ids-out` the harness writes the `transaction_id`s it sent,
+accepted and replayed, and `prove-harness.sh` reads the case's records by partition and offset and
+`step2/reconcile.py` classes each as accepted, late (sent, not counted as accepted), a duplicate of
+an earlier record, foreign, or unparsed. A case fails on a partition read that does not match its
+offsets, any duplicate, foreign or unparsed record, an accepted id with no record, or a count that
+differs from the topic's growth; a late record passes, but only inside the case's settle window (two
+reads of the topic 3 s apart that agree, at most 30 s); one landing after it falls into the next
+case, which fails on its Kafka count; records from the revoked-key case that land late fail the
+proxy control as foreign. Step 2 found three defects, all fixed, in a harness that had never run:
+the plateau shape stopped every run without `--fs-target-users` at once, with no request and exit
+status 0 (observed with Locust 2.43.4); `response.js` does not exist on Locust's responses; and the
+pacing function was assigned to the
 instance, so each user raised on its first wait. Locust records a task's exception and exits 1, so a run with
 `--fs-target-users` would have failed, after at most one request per simulated user, with the same
 status as one whose requests failed (an inference from Locust's source, not observed).
