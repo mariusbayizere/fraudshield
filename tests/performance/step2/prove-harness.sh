@@ -86,12 +86,14 @@ case_records() {
     fi
     (( end > start )) || continue
     # </dev/null: compose exec copies its stdin into the container, and would otherwise consume
-    # the rest of the offsets file this loop reads.
+    # the rest of the offsets file this loop reads. --formatter-property, not --property: Kafka
+    # 4.3 prints the latter's deprecation warning on stdout, ahead of the records.
     "${compose[@]}" exec -T -e KAFKA_HEAP_OPTS=-Xmx64m kafka \
       /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 \
       --topic fs.transactions.raw --partition "$partition" --offset "$start" \
       --max-messages $((end - start)) --timeout-ms 30000 \
-      --property print.key=true --property key.separator=$'\t' </dev/null 2>>"$3.err" |
+      --formatter-property print.key=true --formatter-property key.separator=$'\t' \
+      </dev/null 2>>"$3.err" |
       awk -v p="$partition" -v o="$start" '{print p "\t" o + NR - 1 "\t" $0}' >"$3.part" ||
       echo "partition $partition: the consumer failed"
     got=$(wc -l <"$3.part")
