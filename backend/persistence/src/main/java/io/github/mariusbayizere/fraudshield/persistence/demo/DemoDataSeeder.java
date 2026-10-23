@@ -10,12 +10,15 @@ import io.github.mariusbayizere.fraudshield.persistence.schema.RiskThresholdEnti
 import io.github.mariusbayizere.fraudshield.persistence.schema.RiskThresholdVersionEntity;
 import io.github.mariusbayizere.fraudshield.persistence.schema.ThresholdSeedRepository;
 import io.github.mariusbayizere.fraudshield.persistence.schema.ThresholdVersionRepository;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -28,10 +31,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Seeds one synthetic demo institution with five staff accounts (including the two risk officers
- * that dual control needs), a demo API key and the initial risk configuration (ADR 0019).
+ * that dual control needs), a demo API key and the initial risk configuration (ADR 0019), and the
+ * FX rates ingest needs to accept any currency but RWF (ADR 0063).
  *
  * <p>Only generated credentials are used; passwords are stored as bcrypt (cost 12) hashes and the
- * API key as an HMAC. Seeding is idempotent: if the demo institution exists nothing is changed.
+ * API key as an HMAC. Seeding is idempotent: if the demo institution exists it is not changed. The
+ * FX rates are seeded separately, one currency at a time, so a database seeded before they were
+ * added gains them on the next run.
  */
 public final class DemoDataSeeder implements ApplicationRunner {
 
@@ -44,6 +50,14 @@ public final class DemoDataSeeder implements ApplicationRunner {
   private static final int MIN_PASSWORD_CHARACTERS = 12;
   private static final List<String> CHANNELS =
       List.of("MOBILE_MONEY", "CARD", "AGENT_BANKING", "USSD", "ONLINE", "BANK_TRANSFER");
+
+  /**
+   * The date the demo rates take effect. The packs hold one rate for the whole simulation, and
+   * ingest reads the latest rate dated on or before a transaction's date, so a date well before
+   * anything the generator or the load harness sends makes the one rate apply to all of it. Request
+   * validation bounds only the future, so a transaction dated earlier still finds no rate.
+   */
+  static final LocalDate FX_RATES_FROM = LocalDate.of(2000, 1, 1);
 
   private final DemoSeedProperties properties;
   private final JdbcTemplate jdbc;
@@ -108,6 +122,8 @@ public final class DemoDataSeeder implements ApplicationRunner {
         Objects.requireNonNull(properties.passwords(), "demo passwords are not configured");
     ApiKeyHasher.ParsedKey apiKey = ApiKeyHasher.parse(properties.apiKey());
     byte[] pepper = HexFormat.of().parseHex(Objects.requireNonNull(properties.apiKeyPepperHex()));
+    Integer rates = transactions.execute(status -> fxRates());
+    LOG.info("Seeded {} demo FX rate(s) from the country packs", rates);
     Boolean inserted =
         transactions.execute(
             status -> {
@@ -253,6 +269,31 @@ public final class DemoDataSeeder implements ApplicationRunner {
             institution, 1, new java.math.BigDecimal("0.0500"), 15, 100, 60, now));
     // The audit event that follows is explicit SQL, so these rows must already be in the database.
     entities.flush();
+  }
+
+  /**
+   * One rate per non-RWF currency of the country packs, unless that currency has a rate already.
+   * RWF is not stored: ingest converts it at exactly one without reading the table (ADR 0063).
+   */
+  private int fxRates() {
+    int inserted = 0;
+    for (Map.Entry<String, BigDecimal> rate : CountryPackRates.load().entrySet()) {
+      if ("RWF".equals(rate.getKey())) {
+        continue;
+      }
+      inserted +=
+          jdbc.update(
+              """
+              INSERT INTO fraudshield.fx_rates (currency, rate_date, rwf_per_unit, source)
+              SELECT ?, ?, ?, 'demo: country pack fx_rate_to_base (fixed simulation rate)'
+              WHERE NOT EXISTS (SELECT 1 FROM fraudshield.fx_rates WHERE currency = ?)
+              """,
+              rate.getKey(),
+              FX_RATES_FROM,
+              rate.getValue(),
+              rate.getKey());
+    }
+    return inserted;
   }
 
   private void audit(UUID institution, UUID admin) {

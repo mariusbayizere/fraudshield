@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.mariusbayizere.fraudshield.persistence.TestDatabase;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Clock;
+import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -164,8 +167,83 @@ class DemoDataSeederTest {
   }
 
   @Test
-  void seedingIsIdempotent() {
+  void seedsTheCountryPacksFxRatesSoIngestCanAcceptEveryPackCurrency() throws SQLException {
+    // The packs' fx_rate_to_base, RWF per unit (dataset/generator/params/countries/*.yaml). Without
+    // a row, ingest answers 503 for the currency (ADR 0063); M10's first load run saw about 80% of
+    // ingests refused with 503, which this is inferred to explain (PB-195).
+    assertThat(fxRates(db))
+        .containsExactlyInAnyOrderEntriesOf(
+            Map.of(
+                "KES", new BigDecimal("9.77680000"),
+                "TZS", new BigDecimal("0.50740000"),
+                "UGX", new BigDecimal("0.35080000"),
+                "CDF", new BigDecimal("0.49580000")));
+    try (Connection admin = db.superuser();
+        Statement statement = admin.createStatement();
+        ResultSet rows =
+            statement.executeQuery("SELECT DISTINCT rate_date FROM fraudshield.fx_rates")) {
+      assertThat(rows.next()).isTrue();
+      assertThat(rows.getObject(1, LocalDate.class)).isEqualTo(DemoDataSeeder.FX_RATES_FROM);
+      assertThat(rows.next()).isFalse();
+    }
+  }
+
+  @Test
+  void seedingIsIdempotent() throws SQLException {
     assertThat(seeder.seed()).isFalse();
+    assertThat(fxRowCount(db)).isEqualTo(4);
+  }
+
+  @Test
+  void addsFxRatesToADatabaseSeededBeforeTheyExisted() throws SQLException {
+    TestDatabase other = TestDatabase.create();
+    try (Connection admin = other.superuser();
+        Statement statement = admin.createStatement()) {
+      statement.execute(
+          "INSERT INTO fraudshield.institutions (code, name, country, synthetic) VALUES ('"
+              + DemoDataSeeder.INSTITUTION_CODE
+              + "', 'Seeded before FX rates', 'RW', true)");
+    }
+    assertThat(seeder(other, new DemoSeedProperties(true, PASSWORDS, API_KEY, PEPPER)).seed())
+        .isFalse();
+    assertThat(fxRowCount(other)).isEqualTo(4);
+  }
+
+  @Test
+  void leavesACurrencyThatAlreadyHasARateAndAddsTheOthers() throws SQLException {
+    TestDatabase other = TestDatabase.create();
+    try (Connection admin = other.superuser();
+        Statement statement = admin.createStatement()) {
+      statement.execute(
+          "INSERT INTO fraudshield.fx_rates (currency, rate_date, rwf_per_unit, source)"
+              + " VALUES ('KES', DATE '2026-01-01', 10.5, 'operator load')");
+    }
+    seeder(other, new DemoSeedProperties(true, PASSWORDS, API_KEY, PEPPER)).seed();
+    Map<String, BigDecimal> rates = fxRates(other);
+    assertThat(rates).containsOnlyKeys("KES", "TZS", "UGX", "CDF");
+    assertThat(rates.get("KES")).isEqualByComparingTo("10.5");
+  }
+
+  private static Map<String, BigDecimal> fxRates(TestDatabase database) throws SQLException {
+    Map<String, BigDecimal> rates = new HashMap<>();
+    try (Connection admin = database.superuser();
+        Statement statement = admin.createStatement();
+        ResultSet rows =
+            statement.executeQuery("SELECT currency, rwf_per_unit FROM fraudshield.fx_rates")) {
+      while (rows.next()) {
+        assertThat(rates.put(rows.getString(1), rows.getBigDecimal(2))).isNull();
+      }
+    }
+    return rates;
+  }
+
+  private static long fxRowCount(TestDatabase database) throws SQLException {
+    try (Connection admin = database.superuser();
+        Statement statement = admin.createStatement();
+        ResultSet rows = statement.executeQuery("SELECT count(*) FROM fraudshield.fx_rates")) {
+      rows.next();
+      return rows.getLong(1);
+    }
   }
 
   @Test
