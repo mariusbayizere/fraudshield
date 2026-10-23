@@ -71,8 +71,13 @@ The API checks the key and its `ingest:write` scope before it reads the body, so
 400 means this key may ingest, and no transaction or decision is written. **These statuses are a local
 (single-process) run's.** In a distributed run, a worker whose preflight refuses or which sees a
 401 quits alone and the status stays on that worker; the master ends with 5 or 1 and keeps the
-other workers running (an inference from Locust's source, not observed). Making the master stop the whole run is still to be done before the
-distributed campaign runs.
+other workers running (an inference from Locust's source, not observed). Making the master stop
+the whole run is PB-197, and must be done before any distributed run.
+
+**Failure messages say why.** A refused request is recorded with its status, the problem's
+`type`, `title` and `detail`, and, for a transaction, the currency it was sent with; failures group
+by that message, so a refusal confined to some currencies shows as such in the failure table. The
+`correlation_id` is left out: it differs on every response and would make each failure its own row.
 
 1. **The target must report synthetic data.** Overriding it needs `FS_PERF_ALLOW_REAL_DATA=1`,
    which exists so that the override is a deliberate act with the owner's authorisation, not a

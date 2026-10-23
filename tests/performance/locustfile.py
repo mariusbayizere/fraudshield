@@ -233,6 +233,28 @@ def json_object(response: Any) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+#: Problem members carried into a failure message. Not ``correlation_id``: it differs on every
+#: response, and Locust groups failures by message, so it would make every failure its own row.
+PROBLEM_MEMBERS = ("type", "title", "detail")
+
+
+def refusal(response: Any, prefix: str = "", sent: dict[str, Any] | None = None) -> str:
+    """A failure message that says why, not only that: the status, the problem's type, title and
+    detail, and for a transaction the currency it was sent with.
+
+    The API's own detail does not always carry the cause: its 503 says only "retry the same
+    request", and the reason it decided (no FX rate for the currency, idempotency unavailable) is
+    not sent or logged (PB-196). The request's currency is added so that failures group by it, and
+    a refusal confined to some currencies shows as such in the run's failure table.
+    """
+    parts = [f"{prefix}HTTP {response.status_code}"]
+    problem = json_object(response) or {}
+    parts += [f"{member}={problem[member]}" for member in PROBLEM_MEMBERS if problem.get(member)]
+    if sent is not None:
+        parts.append(f"currency={sent.get('currency')}")
+    return "; ".join(parts)
+
+
 class IngestUser(FastHttpUser):
     """Base class: one API key, one account pool, one pacing rule."""
 
@@ -265,7 +287,7 @@ class IngestUser(FastHttpUser):
             catch_response=True,
         ) as response:
             if response.status_code != 200:
-                response.failure(f"HTTP {response.status_code}")
+                response.failure(refusal(response, sent=body))
                 return None
             payload = json_object(response)
             if payload is None:
@@ -306,7 +328,7 @@ class SustainedIngestUser(IngestUser):
                 catch_response=True,
             ) as response:
                 if response.status_code != 200:
-                    response.failure(f"replay returned HTTP {response.status_code}")
+                    response.failure(refusal(response, "replay returned ", body))
                 elif response.headers.get("Idempotent-Replayed") != "true":
                     response.failure("replay lacked Idempotent-Replayed: true")
                 else:
@@ -353,7 +375,7 @@ class DuplicateStormUser(IngestUser):
             catch_response=True,
         ) as response:
             if response.status_code != 200:
-                response.failure(f"duplicate returned HTTP {response.status_code}")
+                response.failure(refusal(response, "duplicate returned ", self.storm_body))
             elif response.headers.get("Idempotent-Replayed") != "true":
                 response.failure("duplicate lacked Idempotent-Replayed: true")
             elif json_object(response) != self.first_decision:
@@ -383,7 +405,7 @@ class IdempotencyConflictUser(IngestUser):
         ) as response:
             problem = json_object(response) or {}
             if response.status_code != 409:
-                response.failure(f"expected 409, got HTTP {response.status_code}")
+                response.failure(refusal(response, "expected 409, got ", mutated))
             elif problem.get("type") != "urn:fraudshield:problem:idempotency-conflict":
                 got = problem.get("type")
                 response.failure(f"expected the idempotency-conflict type, got {got!r}")
@@ -411,7 +433,7 @@ class BatchIngestUser(IngestUser):
         ) as response:
             payload = json_object(response) or {}
             if response.status_code != 202:
-                response.failure(f"expected 202, got HTTP {response.status_code}")
+                response.failure(refusal(response, "expected 202, got "))
                 return
             if payload.get("accepted") != self.batch_size:
                 response.failure(f"accepted {payload.get('accepted')!r} of {self.batch_size}")
@@ -433,7 +455,7 @@ class BatchIngestUser(IngestUser):
             payload = json_object(response) or {}
             state = payload.get("state")
             if response.status_code != 200:
-                response.failure(f"HTTP {response.status_code}")
+                response.failure(refusal(response))
             elif state not in {"QUEUED", "RUNNING", "COMPLETED"}:
                 response.failure(f"job state {state!r}")
             elif payload.get("failed"):
@@ -462,7 +484,7 @@ class HoldFollowUpUser(IngestUser):
         ) as response:
             payload = json_object(response) or {}
             if response.status_code != 200:
-                response.failure(f"HTTP {response.status_code}")
+                response.failure(refusal(response))
             elif payload.get("decision_sequence") == 1 and payload.get("decided_by") != "MODEL":
                 response.failure(f"sequence 1 decided by {payload.get('decided_by')!r}")
             elif payload.get("transaction_id") != body["transaction_id"]:
@@ -505,7 +527,7 @@ class ValidationMixUser(IngestUser):
         ) as response:
             payload = json_object(response) or {}
             if response.status_code != expected:
-                response.failure(f"expected HTTP {expected}, got {response.status_code}")
+                response.failure(refusal(response, f"expected HTTP {expected}, got "))
             elif "correlation_id" not in payload:
                 response.failure("problem body carries no correlation_id")
             else:
