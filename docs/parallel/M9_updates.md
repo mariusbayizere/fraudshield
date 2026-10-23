@@ -107,6 +107,85 @@ M10's own list is in `docs/parallel/M10_updates.md` on `m10/verification` (`1e9e
 - **A canary design** that works at the replica count M10 deploys, if the campaign tests a rollout
   (an inference: M10's list does not name it).
 
+## 0b. Handover: images and the API in compose (branch `m9/images`, 2026-10-23)
+
+Work on M9's deployability, on `m9/images` (worktree `~/fs-wt/m9-images`, from `main` at
+`4e0a7bc`). **Not merged**; the merge is the owner's decision. Section 0 above is the 2026-10-22
+snapshot of `main`; on this branch, three of its "never exercised" lines no longer hold: the API
+image is built, scanned and start-tested; the API is in the compose stack; and ZAP has run against
+it. Owner decisions for this work (2026-10-22): xgboost CPU-only, with unchanged scores as the
+condition of the lock change; the API in the `full` profile with 1 GiB, recorded as ASSUMED; build
+order endpoint, API image, API in compose, scorer image with PB-179; a migrate service for the main
+database inside the compose piece; ZAP's first findings reported before any is fixed; a start test
+for every image.
+
+### Pieces 1 to 3: done, with evidence
+
+| Piece | Commits | Evidence |
+|---|---|---|
+| 1. `GET /api/v1/environment`, with ADR 0019's guards moved to `backend/deployment-guard` so the API runs them (ADR 0019 amendment, 2026-10-22) | `b745c83`, `42c13cc` | `IngestApiTest` (13) green in CI's java job on `abb3bf5` (job 120198691826) |
+| 2. The API image (`backend/Dockerfile`, context the repository root) with its start test | `581a752`, `42c13cc`, `c5e325a`, `4bff519` | `supply-chain` on `abb3bf5`: build, 404 MB against the 500 MB limit, start test, Trivy, SBOM (job 120198720633, run 39887407173) |
+| 3. The API in compose (`full`), after `fraudshield-migrate`, `pii-vault-migrate` and `kafka-topics-init`; `make env` key material; seed-demo uses the API's pepper | `db89bbf`, `abb3bf5` | stack job 120198728895 (run 39887407143) ran `compose-fraudshield-api.sh`: healthy after 125 s including the build; health; `{"synthetic_data":true}`; 401 without a key; a decided ingest on the rule fallback; an idempotent replay; the decision read back; `fs.transactions.raw` 0 → 1 |
+
+- **Reviews:** `docs/reviews/M9/images-review-1.md` (2 BLOCKER, both fixed) and
+  `images-review-2.md` (0 BLOCKER, 2 MAJOR, both fixed), each with an answers file. Review 2
+  examined the two post-review fixes `c5e325a` and `4bff519` as items of their own and accepted
+  both. `@PreAuthorize("permitAll()")` on `EnvironmentController` was removed and the class made
+  final again (review 2, N1).
+- **Devcontainer:** passed on `4bff519` (dispatched, run 39883492949), its first executed pass on
+  this code. On `abb3bf5` it failed once on PB-158's test and passed on attempt 2 (run
+  39887407378); recorded on PB-158 as its third sighting, cross-linked from PB-182.
+- **Memory:** the API used 463.9 MiB of 1 GiB in the stack job, after a handful of requests. That
+  is a reading at near idle, not evidence that 1 GiB holds under load; the limit stays ASSUMED.
+- **ADR 0019's lesson applied:** `tools/tests/test_deployment_guard_everywhere.py` fails when a
+  module with a `@SpringBootApplication` does not depend on `deployment-guard` (lab notebook,
+  2026-10-22).
+
+### ZAP
+
+The first scan (`zap-baseline.py`, run 39887407268 on `abb3bf5`) reported one informational alert
+(Non-Storable Content on `/`, a 401 with `Cache-Control: no-store`) and passed its gate. It reached
+**4 URLs**: the spider stopped at the 401 on `/`, and no operation of the API was scanned. On the
+owner's decision (2026-10-23) the job is replaced by `zap-api`: `zap-api-scan.py` imports every
+operation from the contract the API serves (`/api/docs/openapi.yaml`), and the job fails when ZAP
+reached fewer URLs than the contract has paths (82), as well as on any High-risk alert. **It has
+not run yet** at the time of writing; its first findings are to be reported before any is fixed.
+Known limits: the scan is unauthenticated (operations behind a key or session are reached and
+answered 401 or 403, nothing behind them is exercised); the contract is OpenAPI 3.1, and how
+completely ZAP imports 3.1 is unknown until the coverage gate reads it.
+
+### Piece 4, the scorer image: not started (owner, 2026-10-23: "not now")
+
+Nothing is built: `ml/Dockerfile` does not exist, so `supply-chain` lists `fraudshield-ml` as
+"NOT BUILT". What is decided and what remains, for whoever picks it up:
+- **Decided:** xgboost CPU-only. The CUDA build carries a shared object of about 406 MB and NCCL,
+  which the scorer never uses, and is the likely route under the 1200 MB limit. **Condition:** the
+  scores are verified unchanged after the lock change; that check is the condition, not an
+  afterthought.
+- **Owed with the image:** M7's licence-notice acceptance (every distribution's licence and notice
+  files in the image, checked by a scan that fails when one is missing, plus an explicit list of
+  texts no wheel ships; see "From M7" below); a start test in
+  `infrastructure/docker/start-tests/fraudshield-ml.sh` (the `images` job fails without one).
+- **Then PB-179:** `ml.yaml`'s arguments and Secret mounts (`fs-scorer serve` needs `--packs`,
+  `--bundle` or `--mlflow`, `--feature-store`, Redis, and mTLS or `--insecure`), checked against
+  `ml/src/fraudshield_ml/serving/cli.py`, and the pod started from the built image in CI.
+- **Deferred:** the ML worker (PB-172). The compose API has no scorer
+  (`FRAUDSHIELD_SCORER_TARGET=127.0.0.1:1`), so every decision there is the rule fallback until
+  the scorer joins the stack.
+
+### Open on this branch
+
+- The stack job keeps its name "core compose stack healthy + smoke test (M0 gate)" though it now
+  also builds and starts the API; it runs on every change to backend main sources, with a
+  45-minute limit.
+- The compose API's SMS provider is WireMock, which has no Africa's Talking stubs (PB-113's
+  family); a customer SMS sent there fails.
+- CI's java job stops at the first failing module, which hid the `final` defect at `42c13cc`
+  behind a coverage failure (review 2, N2); not changed.
+- What M10 needs: of section 0's list, "the API in the compose stack" and the API's image now exist
+  on this branch; the scorer, ML worker, frontend and edge images, data-store manifests, Chaos Mesh
+  and a deploy path do not.
+
 ## 1. What exists
 
 | Area | Files | Checked by |

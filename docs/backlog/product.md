@@ -1516,6 +1516,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Problem:** attempt 1 of the java job failed with `ConditionTimeoutException` at `ResilienceApiTest.java:376` (the block not lifted within the 10 s Awaitility bound); attempt 2 of the same commit passed unchanged. The commit touched no Java runtime code and none of the verification page's operations, so the failure is the test's timing, not a change. Recorded so the next person who sees it does not re-investigate.
 - **Acceptance:** the wait is made deterministic (or its bound justified from the drain and reconciler periods it depends on), and the test passes repeatedly under CI load.
 - **Seen again:** 2026-10-22, at the same line in the devcontainer job's `make ci` (job 119584499076, attempt 1 of run 39705498272, on `39b12d7`), where the same commit's `ci` java job passed; attempt 2 passed unchanged. Two occurrences in two days on different jobs. It is the wall-clock family of PB-182.
+- **Seen a third time (flake candidate, owner 2026-10-23):** 2026-10-23, at the same line in the devcontainer job's `make ci`, attempt 1 of run 39887407378 (job 120198735684) on `abb3bf5`: `ConditionTimeoutException ... was not fulfilled within 10 seconds`, 1 error in 112 ingest tests. The same commit's `ci` java job passed (job 120198691826), and attempt 2 of the devcontainer run passed unchanged (job 120208474438). The commit's only change to ingest's main code made `EnvironmentController` final again, which does not touch the verification page or its webhook. Three occurrences in four days, two of them in the devcontainer, where the build and tests share one runner with the Docker stack; that correlation is noted, not established. Filed here rather than under a new id because it is this item's test and line; cross-linked from PB-182.
 
 ### PB-159 · The network's counterparty lookups on compressed history
 - **Source:** M8B, P1's code review round 1 (finding 6), 2026-10-20 · **Priority:** medium · **Due:** M10
@@ -1608,7 +1609,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   `ApiKeyLifecycleTest.java:835-843` (a spin loop measuring time until refusal) and
   `SessionInvalidationTimingTest` (a 5 s gate and stalls of up to 1.5 s).
   None is known to have failed (CI logs were not searched), and none has a measured rate.
-- **Same family, outside the auth tests:** PB-158 (`ResilienceApiTest.java:376`, a 10 s wait in the ingest tests, owner M6), which has failed twice (2026-10-20 and 2026-10-22).
+- **Same family, outside the auth tests:** PB-158 (`ResilienceApiTest.java:376`, a 10 s wait in the ingest tests, owner M6), which has failed three times (2026-10-20, 2026-10-22, and 2026-10-23 in run 39887407378 attempt 1).
 - **Acceptance:** a sweep of each: what the bound protects, whether it can be stated against an injected clock or a counted operation instead, and, for the bounds that must stay on wall-clock time, a margin justified against CI's runners.
 
 ### PB-183 · M9's post-merge review: alert rules, documents and the evidence table
@@ -1653,7 +1654,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** independent review of `.github/workflows/{infrastructure,security,supply-chain}.yml`, 2026-10-21, before M9's merge · **Priority:** low · **Owner:** M9
 - **Problem:** found low or informational, and not fixed with the signing change:
   1. Trivy downloads its vulnerability database and its misconfiguration check bundle at run time, unpinned; `trivy image` (`supply-chain.yml`) has no retry, so a download outage reads as a failed scan.
-  2. `zap-baseline` and `images` are skipped today, and GitHub counts a skipped job as passing a required check.
+  2. `zap-baseline` (replaced by `zap-api`, 2026-10-23) and `images` are skipped today, and GitHub counts a skipped job as passing a required check.
   3. `cancel-in-progress` keyed on the ref can cancel the scan and the signing of an intermediate `main` commit.
   4. No `.dockerignore` exists, and the ML images build from the repository root, so `.git` enters their build context; `actions/checkout` keeps its default `persist-credentials`, although no job needs git authentication.
   5. `${{ matrix.image }}` is interpolated into `run:` scripts; the values come from a hard-coded list, so only people who can push control them.
