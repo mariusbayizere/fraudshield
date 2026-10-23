@@ -1,10 +1,11 @@
 # Security scan (SRS 8.1 stage 4, build prompt D-28, M9 gate): Trivy on dependencies and on
-# configuration, and an OWASP ZAP baseline scan against the compose stack. Gitleaks already runs
-# on every push in ci.yml (job "gitleaks") with the same pinned launcher; it is not repeated here.
+# configuration, and an OWASP ZAP API scan, driven by the OpenAPI contract, against the compose
+# stack. Gitleaks already runs on every push in ci.yml (job "gitleaks") with the same pinned
+# launcher; it is not repeated here.
 #
 # Gates: Trivy fails on any HIGH or CRITICAL vulnerability that has a fix (--ignore-unfixed; the
 # M9 gate is "0 high/critical unfixed"). ZAP fails on any High-risk alert (ZAP's top risk level;
-# the gate's "0 critical").
+# the gate's "0 critical"), and when it reached fewer URLs than the contract has paths.
 #
 # The ZAP job needs the API in the compose stack. Until a `fraudshield-api` service exists there,
 # the job is SKIPPED (shown as skipped, never as passed) and the `zap-target` job says why.
@@ -110,17 +111,17 @@ jobs:
             echo "present=true" >>"$GITHUB_OUTPUT"
           else
             echo "present=false" >>"$GITHUB_OUTPUT"
-            msg="ZAP baseline NOT RUN: docker-compose.yml has no fraudshield-api service yet."
-            echo "::warning title=zap baseline not run::$msg"
+            msg="ZAP API scan NOT RUN: docker-compose.yml has no fraudshield-api service yet."
+            echo "::warning title=zap API scan not run::$msg"
             echo "$msg" >>"$GITHUB_STEP_SUMMARY"
           fi
 
-  zap-baseline:
-    name: zap baseline (0 High-risk alerts)
+  zap-api:
+    name: zap API scan from the contract (0 High-risk alerts, every path reached)
     needs: zap-target
     if: needs.zap-target.outputs.present == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       REQUIRE_DOCKER: "1"
       # ZAP 2.17.0 (zaproxy/zap-stable), pinned by digest.
@@ -131,23 +132,48 @@ jobs:
       - name: Start the stack with the API
         # Builds the API's image here, uncached; the bound keeps a hung start inside the job's limit.
         run: docker compose --profile full up -d --build --wait --wait-timeout 900 fraudshield-api
-      - name: ZAP baseline scan of the API
+      # The baseline scan (zap-baseline.py) crawls from `/`. On its first run (abb3bf5, run
+      # 39887407268) it got a 401 there, stopped, and reported green from 4 URLs; none of the API's
+      # operations was reached (owner, 2026-10-23: the "scan that read nothing" pattern). The API
+      # scan instead imports every operation from the OpenAPI contract the API itself serves
+      # (GET /api/docs/openapi.yaml), then runs ZAP's passive and active rules against them.
+      # Unauthenticated: an operation that needs a key or a session is reached and answered (401
+      # or 403), but nothing behind authentication is exercised.
+      - name: ZAP API scan of every operation in the contract
         run: |
+          set -o pipefail
           mkdir -p zap && chmod 777 zap
-          # -I: warnings do not fail the step; the High-risk gate below decides.
+          # -I: warnings do not fail the step; the gates below decide.
           docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
-            zap-baseline.py -t http://127.0.0.1:8080/ -J zap-baseline.json -r zap-baseline.html -I
+            zap-api-scan.py -t http://127.0.0.1:8080/api/docs/openapi.yaml -f openapi \
+              -O http://127.0.0.1:8080 -J zap-api.json -r zap-api.html -I 2>&1 | tee zap/zap-api.log
+      # A scan is evidence only for what it reached. The contract's distinct paths are the floor:
+      # fewer URLs means the import failed or was partial, and the gate fails rather than pass on
+      # what it did not read.
+      - name: Gate on coverage
+        run: |
+          set -o pipefail
+          # Path keys are the only two-space-indented keys that start with "/".
+          paths=$(grep -c '^  /' contracts/openapi/fraudshield-api.yaml)
+          scanned=$(sed -n 's/^Total of \([0-9][0-9]*\) URLs$/\1/p' zap/zap-api.log | tail -n 1)
+          echo "ZAP reached ${scanned:-an unknown number of} URLs; the contract has $paths paths" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -z "$scanned" ]; then
+            echo "::error title=zap coverage unknown::the scan's URL count was not found in its output"
+            exit 1
+          fi
+          test "$scanned" -ge "$paths"
       - name: Gate on High-risk alerts
         run: |
-          high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' zap/zap-baseline.json)
+          high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' zap/zap-api.json)
           echo "ZAP High-risk alerts: $high" | tee -a "$GITHUB_STEP_SUMMARY"
-          jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.name)"' zap/zap-baseline.json | sort | uniq -c \
+          jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.name)"' zap/zap-api.json | sort | uniq -c \
             | tee -a "$GITHUB_STEP_SUMMARY"
           test "$high" -eq 0
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: zap-baseline
+          name: zap-api
           path: zap/
           retention-days: 30
       - name: Stop the stack
