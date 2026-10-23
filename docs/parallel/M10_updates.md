@@ -300,7 +300,8 @@ from the specified currency mix"* (2026-10-23).
 
 The harness's failure messages now carry the problem's type, title and detail, and the request's
 currency, so failures group by currency in the run's own failure table. With today's API the detail
-is generic; the currency split is what would have shown this gap without inference.
+is generic; the currency split (observed in run 39920804992, above) shows which currencies are
+refused, and why they are refused is still read from the code.
 
 ### 4. Distributed mode: exit codes 3 and 4 never reach the master
 
