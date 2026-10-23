@@ -1,0 +1,590 @@
+# evidence-run: https://github.com/mariusbayizere/fraudshield/actions/runs/35780471073 (workflow ci), job 106924410392, "python (ruff, mypy --strict, pytest)"
+# evidence-commit: 90078b2e6bc4e17be2fb6429ce45551ce5c581c5
+# evidence-machine: GitHub-hosted runner (see the log's own header below)
+# retrieved: 2026-10-23 with `gh api repos/<owner>/<repo>/actions/jobs/106924410392/logs`; GitHub deletes job logs after 90 days, so the whole log is kept below, unedited
+# log-sha256 (of every byte after the blank line that ends this header): 42e9985f9504411b9f2c56568968d79c985774b5989ac369eeffe7016b29157d
+#
+# The ml suite's summary is the line "1 failed, 538 passed, 1 skipped"; the one failure is the
+# test that starts a real MLflow registry, on HTTP 400 INVALID_PARAMETER_VALUE for an unset alias.
+
+﻿2026-09-22T20:28:08.2464215Z Current runner version: '2.337.0'
+2026-09-22T20:28:08.2481665Z ##[group]Runner Image Provisioner
+2026-09-22T20:28:08.2482289Z Hosted Compute Agent
+2026-09-22T20:28:08.2482737Z Version: 20260828.587
+2026-09-22T20:28:08.2483182Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-09-22T20:28:08.2483683Z Build Date: 2026-08-28T16:44:25Z
+2026-09-22T20:28:08.2484240Z Worker ID: {d3d4fd8f-c148-4aae-b9df-a519a0795c97}
+2026-09-22T20:28:08.2484735Z Azure Region: centralus
+2026-09-22T20:28:08.2485150Z ##[endgroup]
+2026-09-22T20:28:08.2486186Z ##[group]Operating System
+2026-09-22T20:28:08.2486699Z Ubuntu
+2026-09-22T20:28:08.2487066Z 24.04.5
+2026-09-22T20:28:08.2487416Z LTS
+2026-09-22T20:28:08.2488075Z ##[endgroup]
+2026-09-22T20:28:08.2488457Z ##[group]Runner Image
+2026-09-22T20:28:08.2488861Z Image: ubuntu-24.04
+2026-09-22T20:28:08.2489264Z Version: 20260907.300.1
+2026-09-22T20:28:08.2490196Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260907.300/images/ubuntu/Ubuntu2404-Readme.md
+2026-09-22T20:28:08.2491413Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260907.300
+2026-09-22T20:28:08.2492062Z ##[endgroup]
+2026-09-22T20:28:08.2492851Z ##[group]GITHUB_TOKEN Permissions
+2026-09-22T20:28:08.2494567Z Contents: read
+2026-09-22T20:28:08.2494995Z Metadata: read
+2026-09-22T20:28:08.2495368Z ##[endgroup]
+2026-09-22T20:28:08.2496949Z Secret source: Actions
+2026-09-22T20:28:08.2497560Z Cache mode: write
+2026-09-22T20:28:08.2498023Z Prepare workflow directory
+2026-09-22T20:28:08.2800845Z Prepare all required actions
+2026-09-22T20:28:08.2836103Z Getting action download info
+2026-09-22T20:28:08.5155989Z Download action repository 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-09-22T20:28:08.7798888Z Download action repository 'astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4' (SHA:bec219d24cd3e171d82865faccec33120bb574f4)
+2026-09-22T20:28:09.5880904Z Complete job name: python (ruff, mypy --strict, pytest)
+2026-09-22T20:28:09.6553080Z ##[group]Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+2026-09-22T20:28:09.6554420Z with:
+2026-09-22T20:28:09.6555151Z   repository: mariusbayizere/fraudshield
+2026-09-22T20:28:09.6561523Z   token: ***
+2026-09-22T20:28:09.6562303Z   ssh-strict: true
+2026-09-22T20:28:09.6563053Z   ssh-user: git
+2026-09-22T20:28:09.6563831Z   persist-credentials: true
+2026-09-22T20:28:09.6564622Z   clean: true
+2026-09-22T20:28:09.6565371Z   sparse-checkout-cone-mode: true
+2026-09-22T20:28:09.6566223Z   fetch-depth: 1
+2026-09-22T20:28:09.6566942Z   fetch-tags: false
+2026-09-22T20:28:09.6567673Z   show-progress: true
+2026-09-22T20:28:09.6568399Z   lfs: false
+2026-09-22T20:28:09.6569120Z   submodules: false
+2026-09-22T20:28:09.6569918Z   set-safe-directory: true
+2026-09-22T20:28:09.6570899Z   allow-unsafe-pr-checkout: false
+2026-09-22T20:28:09.6571965Z env:
+2026-09-22T20:28:09.6572620Z   REQUIRE_DOCKER: 1
+2026-09-22T20:28:09.6573356Z   UV_VERSION: 0.12.15
+2026-09-22T20:28:09.6574231Z   PYTHON_VERSION: 3.12.14
+2026-09-22T20:28:09.6575017Z   NODE_VERSION: 24.21.0
+2026-09-22T20:28:09.6575777Z   JAVA_VERSION: 21.0.12
+2026-09-22T20:28:09.6576511Z ##[endgroup]
+2026-09-22T20:28:09.7399411Z Syncing repository: mariusbayizere/fraudshield
+2026-09-22T20:28:09.7403446Z ##[group]Getting Git version info
+2026-09-22T20:28:09.7405246Z Working directory is '/home/runner/work/fraudshield/fraudshield'
+2026-09-22T20:28:09.7407872Z [command]/usr/bin/git version
+2026-09-22T20:28:09.8428745Z git version 2.55.0
+2026-09-22T20:28:09.8444058Z ##[endgroup]
+2026-09-22T20:28:09.8453344Z Temporarily overriding HOME='/home/runner/work/_temp/61c654d9-99a5-47fc-ab25-b41cb5090576' before making global git config changes
+2026-09-22T20:28:09.8456010Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-22T20:28:09.8458399Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fraudshield/fraudshield
+2026-09-22T20:28:09.8501172Z Deleting the contents of '/home/runner/work/fraudshield/fraudshield'
+2026-09-22T20:28:09.8504304Z ##[group]Determining repository object format
+2026-09-22T20:28:09.8506133Z ##[endgroup]
+2026-09-22T20:28:09.8507567Z ##[group]Initializing the repository
+2026-09-22T20:28:09.8509024Z [command]/usr/bin/git init /home/runner/work/fraudshield/fraudshield
+2026-09-22T20:28:09.8594262Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-09-22T20:28:09.8596307Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-09-22T20:28:09.8598511Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-09-22T20:28:09.8599987Z hint: call:
+2026-09-22T20:28:09.8601039Z hint:
+2026-09-22T20:28:09.8602456Z hint: 	git config --global init.defaultBranch <name>
+2026-09-22T20:28:09.8603678Z hint:
+2026-09-22T20:28:09.8604765Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-09-22T20:28:09.8606466Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-09-22T20:28:09.8608129Z hint:
+2026-09-22T20:28:09.8608963Z hint: 	git branch -m <name>
+2026-09-22T20:28:09.8609852Z hint:
+2026-09-22T20:28:09.8611171Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-09-22T20:28:09.8613264Z Initialized empty Git repository in /home/runner/work/fraudshield/fraudshield/.git/
+2026-09-22T20:28:09.8616474Z [command]/usr/bin/git remote add origin https://github.com/mariusbayizere/fraudshield
+2026-09-22T20:28:09.8647955Z ##[endgroup]
+2026-09-22T20:28:09.8649784Z ##[group]Disabling automatic garbage collection
+2026-09-22T20:28:09.8651202Z [command]/usr/bin/git config --local gc.auto 0
+2026-09-22T20:28:09.8674610Z ##[endgroup]
+2026-09-22T20:28:09.8676187Z ##[group]Setting up auth
+2026-09-22T20:28:09.8677312Z Removing SSH command configuration
+2026-09-22T20:28:09.8678741Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-22T20:28:09.8704009Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-22T20:28:09.9003844Z Removing HTTP extra header
+2026-09-22T20:28:09.9009259Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-22T20:28:09.9034309Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-22T20:28:09.9185226Z Removing includeIf entries pointing to credentials config files
+2026-09-22T20:28:09.9188465Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-22T20:28:09.9212388Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-22T20:28:09.9404543Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-22T20:28:09.9432087Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/fraudshield/fraudshield/.git.path /home/runner/work/_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config
+2026-09-22T20:28:09.9452869Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/fraudshield/fraudshield/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config
+2026-09-22T20:28:10.0793206Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config
+2026-09-22T20:28:10.0822713Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config
+2026-09-22T20:28:10.0845088Z ##[endgroup]
+2026-09-22T20:28:10.0847357Z ##[group]Fetching the repository
+2026-09-22T20:28:10.0851941Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +90078b2e6bc4e17be2fb6429ce45551ce5c581c5:refs/remotes/origin/m5/scoring
+2026-09-22T20:28:11.3977941Z From https://github.com/mariusbayizere/fraudshield
+2026-09-22T20:28:11.3978887Z  * [new ref]         90078b2e6bc4e17be2fb6429ce45551ce5c581c5 -> origin/m5/scoring
+2026-09-22T20:28:11.3994671Z [command]/usr/bin/git branch --list --remote origin/m5/scoring
+2026-09-22T20:28:11.4008875Z   origin/m5/scoring
+2026-09-22T20:28:11.4016741Z [command]/usr/bin/git rev-parse refs/remotes/origin/m5/scoring
+2026-09-22T20:28:11.4037967Z 90078b2e6bc4e17be2fb6429ce45551ce5c581c5
+2026-09-22T20:28:11.4040336Z ##[endgroup]
+2026-09-22T20:28:11.4041848Z ##[group]Determining the checkout info
+2026-09-22T20:28:11.4045757Z ##[endgroup]
+2026-09-22T20:28:11.4046780Z [command]/usr/bin/git sparse-checkout disable
+2026-09-22T20:28:11.4089637Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-09-22T20:28:11.4116233Z ##[group]Checking out the ref
+2026-09-22T20:28:11.4122348Z [command]/usr/bin/git checkout --progress --force -B m5/scoring refs/remotes/origin/m5/scoring
+2026-09-22T20:28:11.4802561Z Switched to a new branch 'm5/scoring'
+2026-09-22T20:28:11.4807504Z branch 'm5/scoring' set up to track 'origin/m5/scoring'.
+2026-09-22T20:28:11.4813825Z ##[endgroup]
+2026-09-22T20:28:11.4849035Z [command]/usr/bin/git log -1 --format=%H
+2026-09-22T20:28:11.4868981Z 90078b2e6bc4e17be2fb6429ce45551ce5c581c5
+2026-09-22T20:28:11.5097591Z ##[group]Run astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+2026-09-22T20:28:11.5098043Z with:
+2026-09-22T20:28:11.5098301Z   version: 0.12.15
+2026-09-22T20:28:11.5098582Z   python-version: 3.12.14
+2026-09-22T20:28:11.5098861Z   enable-cache: true
+2026-09-22T20:28:11.5099125Z   activate-environment: false
+2026-09-22T20:28:11.5099473Z   no-project: false
+2026-09-22T20:28:11.5099844Z   working-directory: /home/runner/work/fraudshield/fraudshield
+2026-09-22T20:28:11.5102313Z   github-token: ***
+2026-09-22T20:28:11.5102864Z   cache-dependency-glob: **/*requirements*.txt
+**/*requirements*.in
+**/*constraints*.txt
+**/*constraints*.in
+**/pyproject.toml
+**/uv.lock
+**/*.py.lock
+
+2026-09-22T20:28:11.5103432Z   restore-cache: true
+2026-09-22T20:28:11.5103772Z   save-cache: true
+2026-09-22T20:28:11.5104145Z   prune-cache: false
+2026-09-22T20:28:11.5104411Z   cache-python: false
+2026-09-22T20:28:11.5104694Z   ignore-nothing-to-cache: false
+2026-09-22T20:28:11.5105132Z   ignore-empty-workdir: false
+2026-09-22T20:28:11.5105442Z   download-from-astral-mirror: true
+2026-09-22T20:28:11.5105739Z   add-problem-matchers: true
+2026-09-22T20:28:11.5106037Z   quiet: false
+2026-09-22T20:28:11.5106297Z   resolution-strategy: highest
+2026-09-22T20:28:11.5106576Z env:
+2026-09-22T20:28:11.5106844Z   REQUIRE_DOCKER: 1
+2026-09-22T20:28:11.5107097Z   UV_VERSION: 0.12.15
+2026-09-22T20:28:11.5107399Z   PYTHON_VERSION: 3.12.14
+2026-09-22T20:28:11.5107677Z   NODE_VERSION: 24.21.0
+2026-09-22T20:28:11.5107949Z   JAVA_VERSION: 21.0.12
+2026-09-22T20:28:11.5108238Z ##[endgroup]
+2026-09-22T20:28:11.6569733Z Fetching manifest data from https://raw.githubusercontent.com/astral-sh/versions/main/v1/uv.ndjson ...
+2026-09-22T20:28:11.8022739Z Downloading uv from "https://releases.astral.sh/github/uv/releases/download/0.12.15/uv-x86_64-unknown-linux-gnu.tar.gz" ...
+2026-09-22T20:28:12.2035667Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/77996ab3-1158-4a62-83f1-c474a5008ae3 -f /home/runner/work/_temp/af80bec3-d7b6-45ce-8938-880dac9884d3
+2026-09-22T20:28:12.6479742Z Added /home/runner/.local/bin to the path
+2026-09-22T20:28:12.6482844Z Added /opt/hostedtoolcache/uv/0.12.15/x86_64 to the path
+2026-09-22T20:28:12.6483398Z Set UV_PYTHON_INSTALL_DIR to /home/runner/work/_temp/uv-python-dir
+2026-09-22T20:28:12.6484824Z Added /home/runner/work/_temp/uv-python-dir to the path
+2026-09-22T20:28:12.6485245Z Set UV_PYTHON to 3.12.14
+2026-09-22T20:28:12.6509965Z Set UV_CACHE_DIR to /home/runner/work/_temp/setup-uv-cache
+2026-09-22T20:28:12.6510420Z Successfully installed uv version 0.12.15
+2026-09-22T20:28:12.6512454Z Searching files using cache dependency glob: /home/runner/work/fraudshield/fraudshield/**/*requirements*.txt,/home/runner/work/fraudshield/fraudshield/**/*requirements*.in,/home/runner/work/fraudshield/fraudshield/**/*constraints*.txt,/home/runner/work/fraudshield/fraudshield/**/*constraints*.in,/home/runner/work/fraudshield/fraudshield/**/pyproject.toml,/home/runner/work/fraudshield/fraudshield/**/uv.lock,/home/runner/work/fraudshield/fraudshield/**/*.py.lock
+2026-09-22T20:28:12.6846743Z /home/runner/work/fraudshield/fraudshield/contracts/pyproject.toml
+2026-09-22T20:28:12.6915868Z /home/runner/work/fraudshield/fraudshield/dataset/pyproject.toml
+2026-09-22T20:28:12.7178286Z /home/runner/work/fraudshield/fraudshield/ml/pyproject.toml
+2026-09-22T20:28:12.7277700Z /home/runner/work/fraudshield/fraudshield/pyproject.toml
+2026-09-22T20:28:12.7292836Z /home/runner/work/fraudshield/fraudshield/tools/pyproject.toml
+2026-09-22T20:28:12.7324103Z /home/runner/work/fraudshield/fraudshield/uv.lock
+2026-09-22T20:28:12.7331643Z Found 6 files to hash.
+2026-09-22T20:28:12.7380250Z Trying to restore cache from GitHub Actions cache with key: setup-uv-2-x86_64-unknown-linux-gnu-ubuntu-24.04-3.12.14-c6e37fb5aa81f4279ab1802855ef279a5b0d8a1be9df1e2ef4fcb1373284346c
+2026-09-22T20:28:12.9558708Z Cache hit for: setup-uv-2-x86_64-unknown-linux-gnu-ubuntu-24.04-3.12.14-c6e37fb5aa81f4279ab1802855ef279a5b0d8a1be9df1e2ef4fcb1373284346c
+2026-09-22T20:28:14.1320445Z Received 88080384 of 695516172 (12.7%), 84.0 MBs/sec
+2026-09-22T20:28:15.1326751Z Received 264241152 of 695516172 (38.0%), 125.9 MBs/sec
+2026-09-22T20:28:16.1328389Z Received 452984832 of 695516172 (65.1%), 144.0 MBs/sec
+2026-09-22T20:28:17.1337060Z Received 629145600 of 695516172 (90.5%), 149.9 MBs/sec
+2026-09-22T20:28:17.5821655Z Received 695516172 of 695516172 (100.0%), 149.1 MBs/sec
+2026-09-22T20:28:17.5822555Z Cache Size: ~663 MB (695516172 B)
+2026-09-22T20:28:17.5856317Z [command]/usr/bin/tar -xf /home/runner/work/_temp/6b7d2d6b-93f3-4670-a0f9-00dda997da67/cache.tzst -P -C /home/runner/work/fraudshield/fraudshield --use-compress-program unzstd
+2026-09-22T20:28:20.3161850Z Cache restored successfully
+2026-09-22T20:28:20.3390140Z cache restored from GitHub Actions cache with key: setup-uv-2-x86_64-unknown-linux-gnu-ubuntu-24.04-3.12.14-c6e37fb5aa81f4279ab1802855ef279a5b0d8a1be9df1e2ef4fcb1373284346c
+2026-09-22T20:28:20.4497097Z ##[group]Run uv sync --all-packages --locked
+2026-09-22T20:28:20.4497551Z [36;1muv sync --all-packages --locked[0m
+2026-09-22T20:28:20.4522877Z shell: /usr/bin/bash -e {0}
+2026-09-22T20:28:20.4523155Z env:
+2026-09-22T20:28:20.4523379Z   REQUIRE_DOCKER: 1
+2026-09-22T20:28:20.4523637Z   UV_VERSION: 0.12.15
+2026-09-22T20:28:20.4523870Z   PYTHON_VERSION: 3.12.14
+2026-09-22T20:28:20.4524155Z   NODE_VERSION: 24.21.0
+2026-09-22T20:28:20.4524413Z   JAVA_VERSION: 21.0.12
+2026-09-22T20:28:20.4524768Z   UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+2026-09-22T20:28:20.4525141Z   UV_PYTHON: 3.12.14
+2026-09-22T20:28:20.4525463Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-09-22T20:28:20.4525831Z ##[endgroup]
+2026-09-22T20:28:20.6583166Z Downloading cpython-3.12.14-linux-x86_64-gnu (download) (32.6MiB)
+2026-09-22T20:28:21.5422616Z  Downloaded cpython-3.12.14-linux-x86_64-gnu (download)
+2026-09-22T20:28:22.0002005Z Using CPython 3.12.14
+2026-09-22T20:28:22.0002807Z Creating virtual environment at: .venv
+2026-09-22T20:28:22.0023034Z Resolved 85 packages in 0.96ms
+2026-09-22T20:28:22.0201823Z    Building fraudshield-contracts @ file:///home/runner/work/fraudshield/fraudshield/contracts
+2026-09-22T20:28:22.0202857Z    Building fraudshield-tools @ file:///home/runner/work/fraudshield/fraudshield/tools
+2026-09-22T20:28:22.0208801Z    Building fraudshield-dataset @ file:///home/runner/work/fraudshield/fraudshield/dataset
+2026-09-22T20:28:22.0209879Z    Building fraudshield-ml @ file:///home/runner/work/fraudshield/fraudshield/ml
+2026-09-22T20:28:24.6764106Z       Built fraudshield-dataset @ file:///home/runner/work/fraudshield/fraudshield/dataset
+2026-09-22T20:28:24.6847477Z       Built fraudshield-tools @ file:///home/runner/work/fraudshield/fraudshield/tools
+2026-09-22T20:28:24.6857298Z       Built fraudshield-ml @ file:///home/runner/work/fraudshield/fraudshield/ml
+2026-09-22T20:28:24.7041981Z       Built fraudshield-contracts @ file:///home/runner/work/fraudshield/fraudshield/contracts
+2026-09-22T20:28:24.7047557Z Prepared 4 packages in 2.70s
+2026-09-22T20:28:24.7457166Z Installed 83 packages in 40ms
+2026-09-22T20:28:24.7457900Z  + annotated-doc==0.0.5
+2026-09-22T20:28:24.7458317Z  + annotated-types==0.8.0
+2026-09-22T20:28:24.7458581Z  + anyio==4.15.1
+2026-09-22T20:28:24.7458841Z  + ast-serialize==0.11.2
+2026-09-22T20:28:24.7459195Z  + attrs==26.1.0
+2026-09-22T20:28:24.7459435Z  + cfgv==3.5.0
+2026-09-22T20:28:24.7459692Z  + click==8.5.0
+2026-09-22T20:28:24.7460090Z  + cloudpickle==3.1.2
+2026-09-22T20:28:24.7460458Z  + coverage==7.16.1
+2026-09-22T20:28:24.7460999Z  + distlib==0.4.3
+2026-09-22T20:28:24.7461471Z  + fakeredis==2.35.1
+2026-09-22T20:28:24.7462321Z  + fastapi==0.141.1
+2026-09-22T20:28:24.7462659Z  + filelock==3.32.7
+2026-09-22T20:28:24.7463031Z  + flatbuffers==25.12.19
+2026-09-22T20:28:24.7463576Z  + fraudshield-contracts==0.1.0 (from file:///home/runner/work/fraudshield/fraudshield/contracts)
+2026-09-22T20:28:24.7464263Z  + fraudshield-dataset==0.1.0 (from file:///home/runner/work/fraudshield/fraudshield/dataset)
+2026-09-22T20:28:24.7464879Z  + fraudshield-ml==0.1.0 (from file:///home/runner/work/fraudshield/fraudshield/ml)
+2026-09-22T20:28:24.7465472Z  + fraudshield-tools==0.1.0 (from file:///home/runner/work/fraudshield/fraudshield/tools)
+2026-09-22T20:28:24.7465926Z  + grpcio==1.84.0
+2026-09-22T20:28:24.7466222Z  + grpcio-health-checking==1.84.0
+2026-09-22T20:28:24.7466553Z  + grpcio-tools==1.84.0
+2026-09-22T20:28:24.7466953Z  + h11==0.16.0
+2026-09-22T20:28:24.7467219Z  + h3==4.5.0
+2026-09-22T20:28:24.7467558Z  + identify==2.6.19
+2026-09-22T20:28:24.7467829Z  + idna==3.20
+2026-09-22T20:28:24.7468157Z  + iniconfig==2.3.0
+2026-09-22T20:28:24.7468420Z  + joblib==1.6.0
+2026-09-22T20:28:24.7468675Z  + jsonschema==4.26.0
+2026-09-22T20:28:24.7468995Z  + jsonschema-path==0.5.0
+2026-09-22T20:28:24.7469372Z  + jsonschema-specifications==2025.9.1
+2026-09-22T20:28:24.7470340Z  + lazy-object-proxy==1.12.0
+2026-09-22T20:28:24.7470865Z  + librt==0.15.0
+2026-09-22T20:28:24.7471354Z  + lightgbm==4.7.0
+2026-09-22T20:28:24.7471692Z  + ml-dtypes==0.6.0
+2026-09-22T20:28:24.7471981Z  + mypy==2.3.1
+2026-09-22T20:28:24.7472264Z  + mypy-extensions==1.1.0
+2026-09-22T20:28:24.7472550Z  + narwhals==2.26.0
+2026-09-22T20:28:24.7472852Z  + nodeenv==1.10.0
+2026-09-22T20:28:24.7473142Z  + numpy==2.5.3
+2026-09-22T20:28:24.7473422Z  + nvidia-nccl-cu12==2.31.2
+2026-09-22T20:28:24.7473725Z  + onnx==1.23.0
+2026-09-22T20:28:24.7473988Z  + onnxmltools==1.16.0
+2026-09-22T20:28:24.7474318Z  + onnxruntime==1.30.0
+2026-09-22T20:28:24.7474692Z  + openapi-schema-validator==0.9.0
+2026-09-22T20:28:24.7475030Z  + openapi-spec-validator==0.9.0
+2026-09-22T20:28:24.7475354Z  + packaging==26.3
+2026-09-22T20:28:24.7475638Z  + pathable==0.6.0
+2026-09-22T20:28:24.7475894Z  + pathspec==1.1.1
+2026-09-22T20:28:24.7476198Z  + platformdirs==4.11.9
+2026-09-22T20:28:24.7476472Z  + pluggy==1.6.0
+2026-09-22T20:28:24.7476779Z  + pre-commit==4.6.2
+2026-09-22T20:28:24.7477060Z  + prometheus-client==0.26.0
+2026-09-22T20:28:24.7477364Z  + protobuf==7.36.1
+2026-09-22T20:28:24.7477640Z  + pyarrow==25.0.1
+2026-09-22T20:28:24.7477929Z  + pydantic==2.13.5
+2026-09-22T20:28:24.7478237Z  + pydantic-core==2.46.5
+2026-09-22T20:28:24.7478743Z  + pydantic-settings==2.15.0
+2026-09-22T20:28:24.7479073Z  + pygments==2.21.0
+2026-09-22T20:28:24.7479415Z  + pytest==9.1.1
+2026-09-22T20:28:24.7479711Z  + pytest-cov==7.1.0
+2026-09-22T20:28:24.7480166Z  + python-discovery==1.6.0
+2026-09-22T20:28:24.7480501Z  + python-dotenv==1.2.3
+2026-09-22T20:28:24.7481169Z  + pyyaml==6.0.3
+2026-09-22T20:28:24.7481445Z  + redis==8.1.0
+2026-09-22T20:28:24.7481698Z  + referencing==0.37.0
+2026-09-22T20:28:24.7482061Z  + rfc3339-validator==0.1.4
+2026-09-22T20:28:24.7482361Z  + rpds-py==2026.6.3
+2026-09-22T20:28:24.7482681Z  + ruff==0.16.8
+2026-09-22T20:28:24.7482955Z  + scikit-learn==1.8.0
+2026-09-22T20:28:24.7483270Z  + scipy==1.18.1
+2026-09-22T20:28:24.7483553Z  + setuptools==84.0.0
+2026-09-22T20:28:24.7483849Z  + six==1.17.0
+2026-09-22T20:28:24.7484132Z  + skl2onnx==1.20.0
+2026-09-22T20:28:24.7484463Z  + sortedcontainers==2.4.0
+2026-09-22T20:28:24.7484777Z  + starlette==1.6.0
+2026-09-22T20:28:24.7485069Z  + threadpoolctl==3.7.0
+2026-09-22T20:28:24.7485404Z  + types-jsonschema==4.26.0.20260518
+2026-09-22T20:28:24.7485777Z  + types-pyyaml==6.0.12.20260906
+2026-09-22T20:28:24.7486092Z  + typing-extensions==4.16.0
+2026-09-22T20:28:24.7486407Z  + typing-inspection==0.4.4
+2026-09-22T20:28:24.7486718Z  + uvicorn==0.53.0
+2026-09-22T20:28:24.7487036Z  + virtualenv==21.7.10
+2026-09-22T20:28:24.7487349Z  + xgboost==3.0.2
+2026-09-22T20:28:24.7610050Z ##[group]Run uv run ruff check tools ml contracts dataset
+2026-09-22T20:28:24.7610421Z [36;1muv run ruff check tools ml contracts dataset[0m
+2026-09-22T20:28:24.7637273Z shell: /usr/bin/bash -e {0}
+2026-09-22T20:28:24.7637630Z env:
+2026-09-22T20:28:24.7637848Z   REQUIRE_DOCKER: 1
+2026-09-22T20:28:24.7638087Z   UV_VERSION: 0.12.15
+2026-09-22T20:28:24.7638328Z   PYTHON_VERSION: 3.12.14
+2026-09-22T20:28:24.7638554Z   NODE_VERSION: 24.21.0
+2026-09-22T20:28:24.7638830Z   JAVA_VERSION: 21.0.12
+2026-09-22T20:28:24.7639111Z   UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+2026-09-22T20:28:24.7639418Z   UV_PYTHON: 3.12.14
+2026-09-22T20:28:24.7639718Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-09-22T20:28:24.7639996Z ##[endgroup]
+2026-09-22T20:28:24.8503210Z All checks passed!
+2026-09-22T20:28:24.8544324Z ##[group]Run uv run ruff format --check tools ml contracts dataset
+2026-09-22T20:28:24.8544761Z [36;1muv run ruff format --check tools ml contracts dataset[0m
+2026-09-22T20:28:24.8563568Z shell: /usr/bin/bash -e {0}
+2026-09-22T20:28:24.8563830Z env:
+2026-09-22T20:28:24.8564106Z   REQUIRE_DOCKER: 1
+2026-09-22T20:28:24.8564356Z   UV_VERSION: 0.12.15
+2026-09-22T20:28:24.8564575Z   PYTHON_VERSION: 3.12.14
+2026-09-22T20:28:24.8564872Z   NODE_VERSION: 24.21.0
+2026-09-22T20:28:24.8565096Z   JAVA_VERSION: 21.0.12
+2026-09-22T20:28:24.8565387Z   UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+2026-09-22T20:28:24.8565699Z   UV_PYTHON: 3.12.14
+2026-09-22T20:28:24.8565975Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-09-22T20:28:24.8566262Z ##[endgroup]
+2026-09-22T20:28:24.9007968Z 212 files already formatted
+2026-09-22T20:28:24.9044945Z ##[group]Run uv run mypy tools/src tools/tests ml/src ml/tests contracts/src contracts/tests dataset/src dataset/tests
+2026-09-22T20:28:24.9045501Z [36;1muv run mypy tools/src tools/tests ml/src ml/tests contracts/src contracts/tests dataset/src dataset/tests[0m
+2026-09-22T20:28:24.9061320Z shell: /usr/bin/bash -e {0}
+2026-09-22T20:28:24.9061601Z env:
+2026-09-22T20:28:24.9061859Z   REQUIRE_DOCKER: 1
+2026-09-22T20:28:24.9062079Z   UV_VERSION: 0.12.15
+2026-09-22T20:28:24.9062356Z   PYTHON_VERSION: 3.12.14
+2026-09-22T20:28:24.9062575Z   NODE_VERSION: 24.21.0
+2026-09-22T20:28:24.9062810Z   JAVA_VERSION: 21.0.12
+2026-09-22T20:28:24.9063082Z   UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+2026-09-22T20:28:24.9063410Z   UV_PYTHON: 3.12.14
+2026-09-22T20:28:24.9063666Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-09-22T20:28:24.9063925Z ##[endgroup]
+2026-09-22T20:28:38.5623021Z Success: no issues found in 202 source files
+2026-09-22T20:28:38.5784907Z ##[group]Run uv run pytest -q
+2026-09-22T20:28:38.5785130Z [36;1muv run pytest -q[0m
+2026-09-22T20:28:38.5804515Z shell: /usr/bin/bash -e {0}
+2026-09-22T20:28:38.5804720Z env:
+2026-09-22T20:28:38.5804878Z   REQUIRE_DOCKER: 1
+2026-09-22T20:28:38.5805041Z   UV_VERSION: 0.12.15
+2026-09-22T20:28:38.5805373Z   PYTHON_VERSION: 3.12.14
+2026-09-22T20:28:38.5805560Z   NODE_VERSION: 24.21.0
+2026-09-22T20:28:38.5805727Z   JAVA_VERSION: 21.0.12
+2026-09-22T20:28:38.5805942Z   UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+2026-09-22T20:28:38.5806180Z   UV_PYTHON: 3.12.14
+2026-09-22T20:28:38.5806382Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-09-22T20:28:38.5806599Z ##[endgroup]
+2026-09-22T20:28:40.0411875Z ........................................................................ [ 36%]
+2026-09-22T20:28:46.0681918Z ........................................................................ [ 72%]
+2026-09-22T20:28:49.2188805Z /home/runner/work/fraudshield/fraudshield/.venv/lib/python3.12/site-packages/coverage/inorout.py:574: CoverageWarning: Module fraudshield_tools was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.16.1/messages.html#warning-module-not-measured
+2026-09-22T20:28:49.2190382Z   self.warn(msg, slug="module-not-measured")
+2026-09-22T20:28:49.4438071Z ......................................................                   [100%]
+2026-09-22T20:28:49.4438881Z ================================ tests coverage ================================
+2026-09-22T20:28:49.4439625Z _______________ coverage: platform linux, python 3.12.14-final-0 _______________
+2026-09-22T20:28:49.4440118Z 
+2026-09-22T20:28:49.4440434Z Name                                            Stmts   Miss Branch BrPart  Cover   Missing
+2026-09-22T20:28:49.4441442Z -------------------------------------------------------------------------------------------
+2026-09-22T20:28:49.4442363Z src/fraudshield_tools/__init__.py                   9      9      0      0     0%   3-25
+2026-09-22T20:28:49.4443269Z src/fraudshield_tools/commit_msg.py                58      1     26      1    98%   143
+2026-09-22T20:28:49.4444191Z src/fraudshield_tools/compose_budget.py            43      8     20      1    83%   66-74, 78
+2026-09-22T20:28:49.4445140Z src/fraudshield_tools/defect_register.py           48      1     10      1    97%   86
+2026-09-22T20:28:49.4446273Z src/fraudshield_tools/evidence.py                 132      2     52      4    97%   103, 161, 182->180, 235->exit
+2026-09-22T20:28:49.4447313Z src/fraudshield_tools/evidence_run.py              32      3      4      2    86%   41-42, 69
+2026-09-22T20:28:49.4448279Z src/fraudshield_tools/exit_criteria.py            205     52     90     10    72%   84, 126-127, 130-131, 135-136, 160-161, 191-192, 264-268, 275, 278, 326, 337-383
+2026-09-22T20:28:49.4449056Z src/fraudshield_tools/licences.py                 204      3     74      2    98%   321, 379, 541
+2026-09-22T20:28:49.4449719Z src/fraudshield_tools/migration_guard.py           75      4     24      4    92%   73, 82, 121, 127
+2026-09-22T20:28:49.4450383Z src/fraudshield_tools/pytest_docker.py             33     23     10      2    28%   11-24, 27, 35-36, 40, 44, 49-64
+2026-09-22T20:28:49.4451260Z src/fraudshield_tools/readme_status.py             30      2      6      2    89%   32, 41
+2026-09-22T20:28:49.4451899Z src/fraudshield_tools/scope_guard.py               74      4     30      2    94%   72, 119-120, 146
+2026-09-22T20:28:49.4452504Z src/fraudshield_tools/seed_demo.py                108      1     28      2    98%   151->153, 208
+2026-09-22T20:28:49.4453080Z src/fraudshield_tools/srs_tables.py                46      4     14      3    88%   61, 63, 75-76
+2026-09-22T20:28:49.4453684Z src/fraudshield_tools/test_tags/java.py            77      0     34      1    99%   109->111
+2026-09-22T20:28:49.4454305Z src/fraudshield_tools/test_tags/python.py          80      2     40      3    96%   45->40, 58, 69
+2026-09-22T20:28:49.4455589Z src/fraudshield_tools/test_tags/typescript.py      52      0     22      1    99%   51->56
+2026-09-22T20:28:49.4456309Z src/fraudshield_tools/traceability.py             142      6     50      7    93%   119, 145, 157-158, 164->166, 166->168, 249, 260
+2026-09-22T20:28:49.4457056Z src/fraudshield_tools/traceability_seed.py        112      6     24      4    93%   356-357, 408, 435, 455, 489
+2026-09-22T20:28:49.4457831Z -------------------------------------------------------------------------------------------
+2026-09-22T20:28:49.4458319Z TOTAL                                            1654    131    584     52    91%
+2026-09-22T20:28:49.4458584Z 
+2026-09-22T20:28:49.4458718Z 4 files skipped due to complete coverage.
+2026-09-22T20:28:49.4459132Z Required test coverage of 90% reached. Total coverage: 90.57%
+2026-09-22T20:28:49.4459509Z 198 passed in 10.17s
+2026-09-22T20:28:49.4943231Z ##[group]Run uv run pytest -q
+2026-09-22T20:28:49.4943483Z [36;1muv run pytest -q[0m
+2026-09-22T20:28:49.4966905Z shell: /usr/bin/bash -e {0}
+2026-09-22T20:28:49.4967131Z env:
+2026-09-22T20:28:49.4967292Z   REQUIRE_DOCKER: 1
+2026-09-22T20:28:49.4967453Z   UV_VERSION: 0.12.15
+2026-09-22T20:28:49.4967620Z   PYTHON_VERSION: 3.12.14
+2026-09-22T20:28:49.4967800Z   NODE_VERSION: 24.21.0
+2026-09-22T20:28:49.4967960Z   JAVA_VERSION: 21.0.12
+2026-09-22T20:28:49.4968181Z   UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+2026-09-22T20:28:49.4968435Z   UV_PYTHON: 3.12.14
+2026-09-22T20:28:49.4968635Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-09-22T20:28:49.4968848Z ##[endgroup]
+2026-09-22T20:29:02.6458929Z ........................................................................ [ 13%]
+2026-09-22T20:29:03.0158095Z ........................................................................ [ 26%]
+2026-09-22T20:29:03.0807544Z ........................................................................ [ 40%]
+2026-09-22T20:29:08.6231730Z ......................................................s................. [ 53%]
+2026-09-22T20:29:30.6732112Z ........................................................................ [ 66%]
+2026-09-22T20:30:21.8122413Z ...........................F............................................ [ 80%]
+2026-09-22T20:30:26.5352482Z ........................................................................ [ 93%]
+2026-09-22T20:30:28.7188892Z ....................................                                     [100%]
+2026-09-22T20:30:28.7191015Z =================================== FAILURES ===================================
+2026-09-22T20:30:28.7191498Z _______ test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs _______
+2026-09-22T20:30:28.7191768Z 
+2026-09-22T20:30:28.7192109Z bundle_dirs = (PosixPath('/tmp/pytest-of-runner/pytest-1/bundle_a0'), PosixPath('/tmp/pytest-of-runner/pytest-1/bundle_b0'))
+2026-09-22T20:30:28.7193185Z kit = namespace(transaction=<function transaction at 0x7fb189e2d8a0>, context=<function context at 0x7fb189e2d800>, request=...ozenset({'6011'}), cell_rate_prior=0.0087, kyc_tier_range=(1, 3), notes={}), cache=<function _cache at 0x7fb189e2dbc0>)
+2026-09-22T20:30:28.7194128Z tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_publish_and_hot_swap_agai0')
+2026-09-22T20:30:28.7194414Z 
+2026-09-22T20:30:28.7194536Z     @pytest.mark.requires_docker
+2026-09-22T20:30:28.7194800Z     @pytest.mark.req("FR-02-10", "D-50")
+2026-09-22T20:30:28.7195125Z     def test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs(
+2026-09-22T20:30:28.7195998Z         bundle_dirs: tuple[Path, Path], kit: SimpleNamespace, tmp_path: Path
+2026-09-22T20:30:28.7196437Z     ) -> None:
+2026-09-22T20:30:28.7196835Z         """The fake above encodes my reading of MLflow's REST API; this checks it against MLflow
+2026-09-22T20:30:28.7197481Z         3.16.0, the image docker-compose.yml pins, with the artifact proxy on. Skipped without Docker,
+2026-09-22T20:30:28.7198031Z         run in CI (ADR 0010)."""
+2026-09-22T20:30:28.7198322Z         with socket.socket() as s:
+2026-09-22T20:30:28.7198607Z             s.bind(("127.0.0.1", 0))
+2026-09-22T20:30:28.7198900Z             port = int(s.getsockname()[1])
+2026-09-22T20:30:28.7199169Z         command = [
+2026-09-22T20:30:28.7199404Z             "docker",
+2026-09-22T20:30:28.7199606Z             "run",
+2026-09-22T20:30:28.7199868Z             "-d",
+2026-09-22T20:30:28.7200077Z             "--rm",
+2026-09-22T20:30:28.7200569Z             "-p",
+2026-09-22T20:30:28.7201008Z             f"127.0.0.1:{port}:5000",
+2026-09-22T20:30:28.7201266Z             "ghcr.io/mlflow/mlflow:v3.16.0",
+2026-09-22T20:30:28.7201591Z             "mlflow",
+2026-09-22T20:30:28.7201808Z             "server",
+2026-09-22T20:30:28.7202050Z             "--host",
+2026-09-22T20:30:28.7202343Z             "0.0.0.0",  # noqa: S104 - inside the container, published to 127.0.0.1 only
+2026-09-22T20:30:28.7202693Z             "--port",
+2026-09-22T20:30:28.7203044Z             "5000",
+2026-09-22T20:30:28.7203278Z             "--backend-store-uri",
+2026-09-22T20:30:28.7203541Z             "sqlite:////tmp/mlflow.db",
+2026-09-22T20:30:28.7203756Z             "--artifacts-destination",
+2026-09-22T20:30:28.7204017Z             "/tmp/artifacts",  # noqa: S108 - a path inside the throwaway container
+2026-09-22T20:30:28.7204286Z             "--serve-artifacts",
+2026-09-22T20:30:28.7204467Z         ]
+2026-09-22T20:30:28.7204631Z         container = subprocess.run(  # noqa: S603
+2026-09-22T20:30:28.7204908Z             command, capture_output=True, text=True, check=True, timeout=900
+2026-09-22T20:30:28.7205159Z         ).stdout.strip()
+2026-09-22T20:30:28.7205366Z         url = f"http://127.0.0.1:{port}"
+2026-09-22T20:30:28.7205548Z         try:
+2026-09-22T20:30:28.7205780Z             assert wait_until(lambda: _healthy(url), 180), "MLflow did not become healthy"
+2026-09-22T20:30:28.7206057Z             registry = MlflowRegistry(url)
+2026-09-22T20:30:28.7206352Z >           assert registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST) == "1"
+2026-09-22T20:30:28.7206682Z                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-09-22T20:30:28.7206837Z 
+2026-09-22T20:30:28.7206920Z tests/serving/test_registry.py:427: 
+2026-09-22T20:30:28.7207145Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-09-22T20:30:28.7207404Z src/fraudshield_ml/serving/registry.py:494: in publish
+2026-09-22T20:30:28.7207659Z     outgoing = self.by_alias(name, PRODUCTION)
+2026-09-22T20:30:28.7207868Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-09-22T20:30:28.7208086Z src/fraudshield_ml/serving/registry.py:214: in by_alias
+2026-09-22T20:30:28.7208301Z     reply = self._json(
+2026-09-22T20:30:28.7208498Z src/fraudshield_ml/serving/registry.py:207: in _json
+2026-09-22T20:30:28.7208737Z     payload = self._request(method, path, **kwargs)
+2026-09-22T20:30:28.7208956Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-09-22T20:30:28.7209181Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-09-22T20:30:28.7209343Z 
+2026-09-22T20:30:28.7209502Z self = <fraudshield_ml.serving.registry.MlflowRegistry object at 0x7fb1547380b0>
+2026-09-22T20:30:28.7209817Z method = 'GET', path = '/api/2.0/mlflow/registered-models/alias'
+2026-09-22T20:30:28.7210114Z query = {'name': 'fraudshield-ensemble', 'alias': 'production'}, body = None
+2026-09-22T20:30:28.7210371Z raw = None
+2026-09-22T20:30:28.7210458Z 
+2026-09-22T20:30:28.7210526Z     def _request(
+2026-09-22T20:30:28.7210835Z         self,
+2026-09-22T20:30:28.7211009Z         method: str,
+2026-09-22T20:30:28.7211167Z         path: str,
+2026-09-22T20:30:28.7211329Z         *,
+2026-09-22T20:30:28.7211490Z         query: dict[str, str] | None = None,
+2026-09-22T20:30:28.7211690Z         body: Any = None,
+2026-09-22T20:30:28.7211872Z         raw: bytes | None = None,
+2026-09-22T20:30:28.7212062Z     ) -> bytes:
+2026-09-22T20:30:28.7212231Z         url = f"{self.base_url}{path}"
+2026-09-22T20:30:28.7212454Z         if not url.startswith(("http://", "https://")):
+2026-09-22T20:30:28.7212705Z             raise RegistryError(f"{url} is not an http(s) URL")
+2026-09-22T20:30:28.7212929Z         if query:
+2026-09-22T20:30:28.7213107Z             url += "?" + urllib.parse.urlencode(query)
+2026-09-22T20:30:28.7213632Z         data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
+2026-09-22T20:30:28.7214298Z         request = urllib.request.Request(url, data=data, method=method)  # noqa: S310 - checked
+2026-09-22T20:30:28.7214602Z         request.add_header(
+2026-09-22T20:30:28.7214872Z             "Content-Type", "application/json" if raw is None else "application/octet-stream"
+2026-09-22T20:30:28.7215146Z         )
+2026-09-22T20:30:28.7215292Z         if self._token:
+2026-09-22T20:30:28.7218222Z             request.add_header("Authorization", f"***")
+2026-09-22T20:30:28.7218480Z         try:
+2026-09-22T20:30:28.7218930Z             with urllib.request.urlopen(request, timeout=self._timeout) as response:  # noqa: S310
+2026-09-22T20:30:28.7219301Z                 return bytes(response.read())
+2026-09-22T20:30:28.7219580Z         except urllib.error.HTTPError as error:
+2026-09-22T20:30:28.7219882Z             detail = error.read().decode(errors="replace")[:300]
+2026-09-22T20:30:28.7220269Z >           raise RegistryError(f"{method} {path}: HTTP {error.code} {detail}") from None
+2026-09-22T20:30:28.7221438Z E           fraudshield_ml.serving.registry.RegistryError: GET /api/2.0/mlflow/registered-models/alias: HTTP 400 {"error_code": "INVALID_PARAMETER_VALUE", "message": "Registered model alias production not found.", "sqlstate": "KAM00", "error_class": "INVALID_PARAMETER_VALUE"}
+2026-09-22T20:30:28.7222316Z 
+2026-09-22T20:30:28.7222489Z src/fraudshield_ml/serving/registry.py:202: RegistryError
+2026-09-22T20:30:28.7222835Z ================================ tests coverage ================================
+2026-09-22T20:30:28.7223213Z _______________ coverage: platform linux, python 3.12.14-final-0 _______________
+2026-09-22T20:30:28.7223428Z 
+2026-09-22T20:30:28.7223598Z Name                                                 Stmts   Miss Branch BrPart  Cover   Missing
+2026-09-22T20:30:28.7224020Z ------------------------------------------------------------------------------------------------
+2026-09-22T20:30:28.7224753Z src/fraudshield_ml/cli.py                              563    131    140     16    74%   129, 187, 212, 229-237, 248->247, 319-324, 346->345, 389, 444-445, 459-460, 527-572, 578, 662->666, 690, 717, 927, 960, 975->969, 987-1065, 1075-1193
+2026-09-22T20:30:28.7225500Z src/fraudshield_ml/features/batch.py                   385      7    138      8    97%   111, 222, 367, 380, 498->493, 539, 741, 909
+2026-09-22T20:30:28.7226141Z src/fraudshield_ml/features/online.py                  506     10    178     11    97%   84, 124, 470, 621->604, 648, 805, 848, 972, 1012, 1070, 1156
+2026-09-22T20:30:28.7226720Z src/fraudshield_ml/features/primitives.py               18      3      2      0    75%   63-68
+2026-09-22T20:30:28.7227266Z src/fraudshield_ml/features/registry.py                224      2     72      2    99%   596, 618
+2026-09-22T20:30:28.7227757Z src/fraudshield_ml/features/types.py                    75      3     12      3    93%   73, 195, 221
+2026-09-22T20:30:28.7228266Z src/fraudshield_ml/features/vector.py                  173      2     38      3    98%   135->137, 290, 540
+2026-09-22T20:30:28.7228826Z src/fraudshield_ml/featurestore/store.py               435      1    100      4    99%   77, 272->274, 382->380, 790->exit
+2026-09-22T20:30:28.7229347Z src/fraudshield_ml/metrics/single_feature.py            61      1     22      1    98%   99
+2026-09-22T20:30:28.7229806Z src/fraudshield_ml/models/build.py                      90      2      8      0    98%   108-109
+2026-09-22T20:30:28.7230231Z src/fraudshield_ml/models/cli.py                        67      1     12      2    96%   112->122, 126
+2026-09-22T20:30:28.7231026Z src/fraudshield_ml/serving/benchmark.py                216     17     38      8    90%   55, 70-71, 206-208, 258-260, 312, 321->347, 345, 392-403, 409->411, 416
+2026-09-22T20:30:28.7231659Z src/fraudshield_ml/serving/cli.py                       76      5     14      3    91%   110, 114-115, 119, 126
+2026-09-22T20:30:28.7232187Z src/fraudshield_ml/serving/contexts.py                  32      2      4      0    94%   36-37
+2026-09-22T20:30:28.7232685Z src/fraudshield_ml/serving/convert.py                   24      0      8      1    97%   40->42
+2026-09-22T20:30:28.7233380Z src/fraudshield_ml/serving/features.py                 169      1     48      3    98%   176->175, 223->225, 384
+2026-09-22T20:30:28.7233793Z src/fraudshield_ml/serving/generated/regenerate.py      29      2      6      2    89%   46, 63
+2026-09-22T20:30:28.7234336Z src/fraudshield_ml/serving/registry.py                 321     13    106      5    96%   281->283, 318-319, 338-340, 367, 408, 426, 564-567, 607->exit, 617
+2026-09-22T20:30:28.7234863Z src/fraudshield_ml/serving/server.py                   195     24     36      8    84%   89, 166, 221, 249-251, 252->254, 264->exit, 275-279, 283->285, 286-294, 311-321, 353-355
+2026-09-22T20:30:28.7235346Z src/fraudshield_ml/serving/shadow.py                   204      5     34      6    95%   97->99, 221, 225, 226->230, 369, 398-399
+2026-09-22T20:30:28.7235745Z src/fraudshield_ml/serving/thresholds.py                62      0     16      1    99%   91->94
+2026-09-22T20:30:28.7236110Z src/fraudshield_ml/training/battery.py                 149      2     30      2    98%   332, 344
+2026-09-22T20:30:28.7236499Z src/fraudshield_ml/training/evaluation.py               67      7     10      3    87%   144->152, 159-163, 165-169, 193
+2026-09-22T20:30:28.7236874Z src/fraudshield_ml/training/frontier.py                 52      1      8      1    97%   75
+2026-09-22T20:30:28.7237243Z src/fraudshield_ml/training/gate.py                    148      3     28      4    96%   76, 87, 103, 156->155
+2026-09-22T20:30:28.7237616Z src/fraudshield_ml/training/gate_report.py              98      3     26      1    97%   92, 135-136
+2026-09-22T20:30:28.7237998Z src/fraudshield_ml/training/gate_run.py                189      3     30      4    97%   193->197, 216, 235, 390
+2026-09-22T20:30:28.7238365Z src/fraudshield_ml/training/model.py                    92      1     16      1    98%   161
+2026-09-22T20:30:28.7238741Z src/fraudshield_ml/training/report.py                   92      3     34      5    94%   133->174, 147, 204->216, 216->226, 258-262
+2026-09-22T20:30:28.7239139Z src/fraudshield_ml/training/smoke.py                   155      3     28      3    97%   82, 238->243, 401, 404
+2026-09-22T20:30:28.7239494Z ------------------------------------------------------------------------------------------------
+2026-09-22T20:30:28.7239793Z TOTAL                                                 5837    258   1354    111    94%
+2026-09-22T20:30:28.7239948Z 
+2026-09-22T20:30:28.7240041Z 25 files skipped due to complete coverage.
+2026-09-22T20:30:28.8587815Z Required test coverage of 90% reached. Total coverage: 94.31%
+2026-09-22T20:30:28.8588262Z =========================== short test summary info ============================
+2026-09-22T20:30:28.8589070Z SKIPPED [1] tests/featurestore/test_db_fallback.py:109: M6 delivers the PostgreSQL Fallback over account_velocity_cache, the transactions hypertable and PB-37's durable table; it must pass this test (M5-3)
+2026-09-22T20:30:28.8589617Z 1 failed, 538 passed, 1 skipped in 98.98s (0:01:38)
+2026-09-22T20:30:29.1959224Z ##[error]Process completed with exit code 1.
+2026-09-22T20:30:29.2062213Z Post job cleanup.
+2026-09-22T20:30:29.2675590Z [command]/usr/bin/git version
+2026-09-22T20:30:29.2705845Z git version 2.55.0
+2026-09-22T20:30:29.2735648Z Temporarily overriding HOME='/home/runner/work/_temp/dddd06c0-f2f3-4e9f-a069-5eecc608a711' before making global git config changes
+2026-09-22T20:30:29.2736470Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-22T20:30:29.2738876Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fraudshield/fraudshield
+2026-09-22T20:30:29.2762727Z Removing SSH command configuration
+2026-09-22T20:30:29.2767946Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-22T20:30:29.2792024Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-22T20:30:29.2944577Z Removing HTTP extra header
+2026-09-22T20:30:29.2948037Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-22T20:30:29.2970616Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-22T20:30:29.3160283Z Removing includeIf entries pointing to credentials config files
+2026-09-22T20:30:29.3163835Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-22T20:30:29.3186237Z includeif.gitdir:/home/runner/work/fraudshield/fraudshield/.git.path
+2026-09-22T20:30:29.3186814Z includeif.gitdir:/home/runner/work/fraudshield/fraudshield/.git/worktrees/*.path
+2026-09-22T20:30:29.3187263Z includeif.gitdir:/github/workspace/.git.path
+2026-09-22T20:30:29.3187689Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-09-22T20:30:29.3192906Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/fraudshield/fraudshield/.git.path
+2026-09-22T20:30:29.3207915Z /home/runner/work/_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config
+2026-09-22T20:30:29.3214905Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/fraudshield/fraudshield/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-7795f0ca\-8097\-4ecb\-8d28\-579cd9ac2a90\.config
+2026-09-22T20:30:29.3238029Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/fraudshield/fraudshield/.git/worktrees/*.path
+2026-09-22T20:30:29.3253299Z /home/runner/work/_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config
+2026-09-22T20:30:29.3258983Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/fraudshield/fraudshield/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-7795f0ca\-8097\-4ecb\-8d28\-579cd9ac2a90\.config
+2026-09-22T20:30:29.3288987Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-09-22T20:30:29.3304306Z /github/runner_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config
+2026-09-22T20:30:29.3309180Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-7795f0ca\-8097\-4ecb\-8d28\-579cd9ac2a90\.config
+2026-09-22T20:30:29.3332039Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-09-22T20:30:29.3347721Z /github/runner_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config
+2026-09-22T20:30:29.3353920Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-7795f0ca\-8097\-4ecb\-8d28\-579cd9ac2a90\.config
+2026-09-22T20:30:29.3383216Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-22T20:30:29.3521203Z Removing credentials config '/home/runner/work/_temp/git-credentials-7795f0ca-8097-4ecb-8d28-579cd9ac2a90.config'
+2026-09-22T20:30:29.3629424Z Cleaning up orphan processes
