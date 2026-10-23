@@ -286,6 +286,13 @@ the harness draws its currency uniformly from five, so four in five refusals wer
 observed 79.7% (94 of 118) and 83.3% (35 of 42). The API's own start test sends one RWF
 transaction, and passed.
 
+**Then observed, not inferred, for the currency pattern.** The harness re-ran on `c783540`, with
+the request's currency in each failure message (run 39920804992, job 120305281484, the logs' final
+tables and the failure CSVs in its artifact). Every refusal was in KES, TZS, UGX or CDF, and no RWF
+request was refused: 90 of 113 new ingests in the passing case (79.6%; Kafka +23, the 23 accepted)
+and 30 of 39 through the proxy (76.9%). That the reason is the missing rate, rather than something
+else confined to those currencies, is still read from the code, since the 503 does not say.
+
 The fix is on `fix/demo-fx-rates`, not merged: the demo seed inserts the country packs' fixed
 simulation rates. Step 2's passing case has not been re-run with it. The harness was not restricted
 to RWF; the owner's words: *"Restricting the harness to RWF would make step 2 green while drifting
