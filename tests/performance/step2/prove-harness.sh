@@ -58,10 +58,61 @@ failures=0
 summary="$out/summary.md"
 printf '| case | exit | expected | seconds | locust requests / failures | reached the API | verdict |\n|---|---|---|---|---|---|---|\n' >"$summary"
 
+# raw_records: the topic's record count, summed over its partitions. The per-partition end
+# offsets of the last read are kept in $out/.offsets.last, so a case's records can be read back.
 raw_records() {
   "${compose[@]}" exec -T -e KAFKA_HEAP_OPTS=-Xmx64m kafka \
     /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server kafka:29092 \
-    --topic fs.transactions.raw --time -1 | awk -F: '{sum += $3} END {print sum + 0}'
+    --topic fs.transactions.raw --time -1 >"$out/.offsets.last"
+  awk -F: '{sum += $3} END {print sum + 0}' "$out/.offsets.last"
+}
+
+# case_records <before> <after> <file>: every record written between two offset snapshots
+# (topic:partition:offset lines), as partition<TAB>offset<TAB>key<TAB>value. The key is the
+# transaction_id (contracts/kafka/topics.yaml). Prints one line per partition whose read came up
+# short or could not be made, so a partial read is reported as such, not as missing records; the
+# consumer's stderr goes to <file>.err. The consumer reads a single partition in offset order, so
+# a record's offset is its start plus its position.
+case_records() {
+  local partition start end got
+  : >"$3"
+  : >"$3.err"
+  # Driven by the after snapshot, so a missing or empty before snapshot shows as unreadable.
+  while IFS=: read -r _ partition end; do
+    start=$(awk -F: -v p="$partition" '$2 == p {print $3}' "$1")
+    if ! [[ "$partition" =~ ^[0-9]+$ && "$start" =~ ^[0-9]+$ && "$end" =~ ^[0-9]+$ ]]; then
+      echo "offsets unreadable for partition '$partition'"
+      continue
+    fi
+    (( end > start )) || continue
+    # </dev/null: compose exec copies its stdin into the container, and would otherwise consume
+    # the rest of the offsets file this loop reads.
+    "${compose[@]}" exec -T -e KAFKA_HEAP_OPTS=-Xmx64m kafka \
+      /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 \
+      --topic fs.transactions.raw --partition "$partition" --offset "$start" \
+      --max-messages $((end - start)) --timeout-ms 30000 \
+      --property print.key=true --property key.separator=$'\t' </dev/null 2>>"$3.err" |
+      awk -v p="$partition" -v o="$start" '{print p "\t" o + NR - 1 "\t" $0}' >"$3.part" ||
+      echo "partition $partition: the consumer failed"
+    got=$(wc -l <"$3.part")
+    cat "$3.part" >>"$3"
+    (( got == end - start )) || echo "partition $partition: read $got of $((end - start))"
+  done <"$2"
+  [[ -s "$2" ]] || echo "no offsets after the case"
+  rm -f "$3.part"
+}
+
+# reconcile <case>: names each of the case's raw records by transaction_id against the ids the
+# harness wrote (PB-198), after any shortfall in reading them. Reports only; the verdict does not
+# depend on it yet.
+reconcile() {
+  local name=$1 shortfall
+  shortfall=$(case_records "$out/$name.offsets.before" "$out/$name.offsets.after" \
+    "$out/$name.records.tsv" | paste -sd ';' -)
+  [[ -z "$shortfall" ]] || printf 'READ INCOMPLETE (%s); ' "$shortfall"
+  python3 tests/performance/step2/reconcile.py "$out/$name.ids.json" \
+    "$out/$name.records.tsv" "$out/$name.reconcile.json" ||
+    echo "records: reconciliation did not complete (see the job log)"
 }
 
 # settled_records: the topic's count once two reads 3 s apart agree (the API publishes
@@ -121,11 +172,14 @@ run_case() {
   shift 4
   local before after started rc=0
   before=$(settled_records)
+  cp "$out/.offsets.last" "$out/$name.offsets.before"
+  rm -f "$out/$name.ids.json"
   started=$(date +%s)
   FS_PERF_API_KEY="$api_key" "${locust[@]}" -f "${case_harness:-$harness}" --host "$host" \
     --csv "$out/$name" "$@" >"$out/$name.log" 2>&1 || rc=$?
   case_seconds=$(($(date +%s) - started))
   after=$(settled_records)
+  cp "$out/.offsets.last" "$out/$name.offsets.after"
   case_rc=$rc
   case_kafka=$((after - before))
   # The harness's own provenance line, written at quit: exact, where the stats CSV is rewritten
@@ -190,8 +244,10 @@ split_total() {
 # absence of failures. With at least 60 accepted (about 120 are sent at the nominal rate), a
 # uniform draw over five currencies leaves one out with probability below 1e-5, so a missing
 # currency is a finding, not chance; a run too slow to reach 60 fails on that floor instead.
-run_case pass 0 "$key" "$api" -u "$users" -r "$users" -t 60s --fs-user-throughput "$rate"
-verdict pass "Kafka +$case_kafka; $case_accepted accepted ($case_currencies)" \
+run_case pass 0 "$key" "$api" -u "$users" -r "$users" -t 60s --fs-user-throughput "$rate" \
+  --fs-ids-out "$out/pass.ids.json"
+pass_records=$(reconcile pass) || pass_records="records: reconciliation did not complete"
+verdict pass "Kafka +$case_kafka; $case_accepted accepted ($case_currencies); $pass_records" \
   '(( case_requests > 0 ))' '(( case_failures == 0 ))' \
   '(( case_kafka >= case_accepted && case_kafka <= case_accepted + users ))' \
   '(( case_accepted >= 60 ))' '(( $(split_total) == case_accepted ))' \
@@ -244,8 +300,10 @@ verdict key-revoked-in-run "proxy forwarded $(forwarded "$out/key-revoked-in-run
 # reach the API, and Kafka, but not the run's statistics.)
 proxy 18085 "$out/proxy-control.counts.json"
 run_case proxy-control 0 "$key" http://127.0.0.1:18085 -u "$users" -r "$users" -t 20s \
-  --fs-user-throughput "$rate"
-verdict proxy-control "proxy forwarded $(forwarded "$out/proxy-control.counts.json"); accepted ($case_currencies)" \
+  --fs-user-throughput "$rate" --fs-ids-out "$out/proxy-control.ids.json"
+control_records=$(reconcile proxy-control) ||
+  control_records="records: reconciliation did not complete"
+verdict proxy-control "proxy forwarded $(forwarded "$out/proxy-control.counts.json"); accepted ($case_currencies); Kafka +$case_kafka; $control_records" \
   '(( case_requests > 0 ))' '(( case_failures == 0 ))'
 
 # 9. The harness with the shape defect restored sends nothing; that must fail, not exit 0.

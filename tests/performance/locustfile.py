@@ -99,6 +99,13 @@ def _add_arguments(parser: Any) -> None:
         env_var="FS_PERF_TARGET_USERS",
         help="users at the plateau; 0 leaves the shape disabled and honours -u/-r",
     )
+    parser.add_argument(
+        "--fs-ids-out",
+        default="",
+        env_var="FS_PERF_IDS_OUT",
+        help="write the transaction_ids the sustained scenario sent, accepted and replayed to this "
+        "JSON file at quit, for reconciling against the raw topic; empty records nothing",
+    )
 
 
 #: Process exit status when the preflight refuses the target: unreachable, not serving synthetic
@@ -202,6 +209,21 @@ _RUNNER: dict[str, Any] = {}
 #: worker's does not correspond to its ``accepted_new``, which covers only its last report to the
 #: master (PB-197).
 ACCEPTED_BY_CURRENCY: Counter[str] = Counter()
+
+
+#: With ``--fs-ids-out``, the sustained scenario's ``transaction_id``s: every new ingest when its
+#: request is about to be sent, the ones counted as accepted, and every replay. A record on the raw
+#: topic can then be named: accepted, sent but not counted (for example a request in flight when the
+#: run stopped), a second record for one id, or not from this run at all (PB-198). Kept only when
+#: the option is set, since a campaign run would hold every id it sent. A local run's, as above.
+SENT_IDS: list[str] = []
+ACCEPTED_IDS: list[str] = []
+REPLAYED_IDS: list[str] = []
+
+
+def _recording_ids() -> bool:
+    runner = _RUNNER.get("runner")
+    return runner is not None and bool(getattr(runner.environment.parsed_options, "fs_ids_out", ""))
 
 
 @events.reset_stats.add_listener
@@ -347,6 +369,8 @@ class SustainedIngestUser(IngestUser):
         replay = self.accepted and self.rng.random() < self.settings.replay_share
         if replay:
             body = self.rng.choice(self.accepted)
+            if _recording_ids():
+                REPLAYED_IDS.append(str(body["transaction_id"]))
             with self.client.post(
                 f"{API_ROOT}/transactions/ingest",
                 json=body,
@@ -362,8 +386,13 @@ class SustainedIngestUser(IngestUser):
                     response.success()
             return
         body = transaction(self.pool)
+        recording = _recording_ids()
+        if recording:
+            SENT_IDS.append(str(body["transaction_id"]))
         if self.ingest(body, name="POST /transactions/ingest") is not None:
             ACCEPTED_BY_CURRENCY[str(body.get("currency"))] += 1
+            if recording:
+                ACCEPTED_IDS.append(str(body["transaction_id"]))
             self.accepted.append(body)
             # Bound the memory a worker holds at the specified rate: the replay share only needs a
             # recent window, and an unbounded list would grow for the whole plateau.
@@ -627,6 +656,15 @@ def _mark_unexecuted(environment: Environment, **_: Any) -> None:
         count = len(environment.runner.exceptions)
         logging.error("TASK RAISED: %d distinct exception(s) in tasks; failing the run", count)
         environment.process_exit_code = EXIT_TASK_RAISED
+    ids_out = getattr(environment.parsed_options, "fs_ids_out", "")
+    if ids_out:
+        # Report only: a failed write is logged and must not change the run's outcome.
+        try:
+            Path(ids_out).write_text(
+                json.dumps({"sent": SENT_IDS, "accepted": ACCEPTED_IDS, "replayed": REPLAYED_IDS})
+            )
+        except OSError:
+            logging.exception("could not write the transaction ids to %s", ids_out)
     run_id = uuid4()
     print(
         json.dumps(
