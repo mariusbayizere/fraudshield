@@ -7,7 +7,9 @@
 #
 #   case                         host                          expected
 #   pass                         the API                       0; requests > 0, no failures,
-#                                                              Kafka grew by what was accepted
+#                                                              Kafka grew by what was accepted,
+#                                                              >= 60 accepted, every pack
+#                                                              currency among them
 #   wrong-key                    the API                       3 (preflight); nothing sent
 #   synthetic-false              proxy: environment false      3; nothing forwarded, Kafka unchanged
 #   environment-without-flag     proxy: environment {}         3; nothing forwarded
@@ -128,11 +130,14 @@ run_case() {
   case_kafka=$((after - before))
   # The harness's own provenance line, written at quit: exact, where the stats CSV is rewritten
   # only once a second and misses the last of the run.
-  read -r case_requests case_failures case_accepted < <(python3 - "$out/$name.log" <<'PY'
+  # The currency split is printed as CUR=n,... in sorted order, or "none".
+  read -r case_requests case_failures case_accepted case_currencies < <(python3 - "$out/$name.log" <<'PY'
 import json, sys
 lines = [line for line in open(sys.argv[1]) if line.startswith('{"run_id"')]
 record = json.loads(lines[-1]) if lines else {}
-print(record.get("requests", 0), record.get("failures", 0), record.get("accepted_new", 0))
+split = record.get("accepted_new_by_currency") or {}
+print(record.get("requests", 0), record.get("failures", 0), record.get("accepted_new", 0),
+      ",".join(f"{k}={v}" for k, v in split.items()) or "none")
 PY
   )
   case_expected=$expected
@@ -170,11 +175,27 @@ forwarded() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["i
 users=2
 rate=1
 
-# 1. The run passes against the real API, and what it says it sent is what arrived.
+# accepted_in <currency>: the case's accepted split has at least one ingest in that currency.
+accepted_in() { [[ ",$case_currencies," =~ ,$1=[1-9][0-9]*, ]]; }
+# split_total: the sum of the case's accepted split.
+split_total() {
+  local total=0 part parts
+  IFS=, read -ra parts <<<"$case_currencies"
+  for part in "${parts[@]}"; do [[ "$part" == *=* ]] && total=$((total + ${part#*=})); done
+  echo "$total"
+}
+
+# 1. The run passes against the real API, and what it says it sent is what arrived. Every pack
+# currency must be among the accepted ingests, read from the run rather than inferred from the
+# absence of failures. With at least 60 accepted (about 120 are sent at the nominal rate), a
+# uniform draw over five currencies leaves one out with probability below 1e-5, so a missing
+# currency is a finding, not chance; a run too slow to reach 60 fails on that floor instead.
 run_case pass 0 "$key" "$api" -u "$users" -r "$users" -t 60s --fs-user-throughput "$rate"
-verdict pass "Kafka +$case_kafka; $case_accepted accepted" \
+verdict pass "Kafka +$case_kafka; $case_accepted accepted ($case_currencies)" \
   '(( case_requests > 0 ))' '(( case_failures == 0 ))' \
   '(( case_kafka >= case_accepted && case_kafka <= case_accepted + users ))' \
+  '(( case_accepted >= 60 ))' '(( $(split_total) == case_accepted ))' \
+  'accepted_in RWF' 'accepted_in KES' 'accepted_in TZS' 'accepted_in UGX' 'accepted_in CDF' \
   'grep -q "preflight passed" "$out/pass.log"'
 
 # 2. A wrong key stops the run before the first ingest request.
@@ -224,7 +245,7 @@ verdict key-revoked-in-run "proxy forwarded $(forwarded "$out/key-revoked-in-run
 proxy 18085 "$out/proxy-control.counts.json"
 run_case proxy-control 0 "$key" http://127.0.0.1:18085 -u "$users" -r "$users" -t 20s \
   --fs-user-throughput "$rate"
-verdict proxy-control "proxy forwarded $(forwarded "$out/proxy-control.counts.json")" \
+verdict proxy-control "proxy forwarded $(forwarded "$out/proxy-control.counts.json"); accepted ($case_currencies)" \
   '(( case_requests > 0 ))' '(( case_failures == 0 ))'
 
 # 9. The harness with the shape defect restored sends nothing; that must fail, not exit 0.

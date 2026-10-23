@@ -38,6 +38,7 @@ import logging
 import random
 import urllib.error
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -194,6 +195,29 @@ def _preflight(environment: Environment, **_: Any) -> None:
 #: The runner, captured at init, so the request listener can stop it.
 _RUNNER: dict[str, Any] = {}
 
+#: Non-replay ingests this process counted as successes (HTTP 200 and the decision contract held),
+#: by the currency they were sent with: in a local run the same set as ``accepted_new``, so a run
+#: shows which currencies were accepted rather than leaving it to be inferred from the absence of
+#: failures. Per process, and only a local run's: in a distributed run the master's is empty and a
+#: worker's does not correspond to its ``accepted_new``, which covers only its last report to the
+#: master (PB-197).
+ACCEPTED_BY_CURRENCY: Counter[str] = Counter()
+
+
+@events.reset_stats.add_listener
+def _reset_accepted_by_currency(**_: Any) -> None:
+    """Reset with the statistics from the web UI, so the split still sums to ``accepted_new``."""
+    ACCEPTED_BY_CURRENCY.clear()
+
+
+@events.spawning_complete.add_listener
+def _reset_accepted_by_currency_with_option(**_: Any) -> None:
+    """Reset where ``--reset-stats`` resets the statistics: Locust does it when spawning completes
+    and does not fire ``reset_stats`` for it."""
+    runner = _RUNNER.get("runner")
+    if runner is not None and runner.environment.reset_stats:
+        ACCEPTED_BY_CURRENCY.clear()
+
 
 @events.init.add_listener
 def _capture_runner(environment: Environment, **_: Any) -> None:
@@ -339,6 +363,7 @@ class SustainedIngestUser(IngestUser):
             return
         body = transaction(self.pool)
         if self.ingest(body, name="POST /transactions/ingest") is not None:
+            ACCEPTED_BY_CURRENCY[str(body.get("currency"))] += 1
             self.accepted.append(body)
             # Bound the memory a worker holds at the specified rate: the replay share only needs a
             # recent window, and an unbounded list would grow for the whole plateau.
@@ -612,6 +637,7 @@ def _mark_unexecuted(environment: Environment, **_: Any) -> None:
                 "failures": stats.num_failures,
                 # Non-replay ingests the API accepted: what step 2 reconciles against Kafka.
                 "accepted_new": accepted.num_requests - accepted.num_failures if accepted else 0,
+                "accepted_new_by_currency": dict(sorted(ACCEPTED_BY_CURRENCY.items())),
                 "note": "no gate number may be read from this run unless the machine is recorded "
                 "in docs/benchmarks/hardware.md (ADR 0010)",
             }

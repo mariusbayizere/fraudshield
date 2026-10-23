@@ -78,6 +78,11 @@ the whole run is PB-197, and must be done before any distributed run.
 `type`, `title` and `detail`, and, for a transaction, the currency it was sent with; failures group
 by that message, so a refusal confined to some currencies shows as such in the failure table. The
 `correlation_id` is left out: it differs on every response and would make each failure its own row.
+Successful new ingests (HTTP 200 with the decision contract held) are counted by currency too:
+the provenance line printed at quit carries `accepted_new_by_currency` beside `accepted_new`, so
+which currencies were accepted is read off the run, not inferred from the absence of failures. The
+count is a local run's: in a distributed run the master's is empty and a worker's does not
+correspond to its `accepted_new` (PB-197).
 
 1. **The target must report synthetic data.** Overriding it needs `FS_PERF_ALLOW_REAL_DATA=1`,
    which exists so that the override is a deliberate act with the owner's authorisation, not a
