@@ -135,17 +135,46 @@ jobs:
       # The baseline scan (zap-baseline.py) crawls from `/`. On its first run (abb3bf5, run
       # 39887407268) it got a 401 there, stopped, and reported green from 4 URLs; none of the API's
       # operations was reached (owner, 2026-10-23: the "scan that read nothing" pattern). The API
-      # scan instead imports every operation from the OpenAPI contract the API itself serves
-      # (GET /api/docs/openapi.yaml), then runs ZAP's passive and active rules against them.
-      # Unauthenticated: an operation that needs a key or a session is reached and answered (401
-      # or 403), but nothing behind authentication is exercised.
-      - name: ZAP API scan of every operation in the contract
+      # scan is given the operations of the OpenAPI contract instead, and runs ZAP's passive and
+      # active rules against them. How many it reaches is what the coverage gate below reads.
+      # Unauthenticated: an operation that needs a key or a session is answered (401 or 403), but
+      # nothing behind authentication is exercised.
+      #
+      # ZAP scans a COPY of the contract, not the contract itself. RuleExpression (the rule DSL's
+      # tree) refers to itself in its `all`, `any` and `not` branches. ZAP's OpenAPI import expands
+      # references without a depth limit and crashed on it at its first run (ca3653b..146d987, run
+      # 39896801735: "Document nesting depth (1001) exceeds the maximum allowed (1000)"). The copy,
+      # taken from what the API serves, replaces those three nested references with a plain
+      # `{ type: object }`; the contract the API serves is unchanged. NOT TESTED as a result: deep
+      # rule expressions in RuleDraft request bodies (POST /rules, /rules/preview and the rule
+      # versions). ZAP generates those bodies with an empty object where a nested expression would
+      # be, so this scan says nothing about how the API handles nested `all`/`any`/`not` trees.
+      # The rule DSL's own tests cover parsing; this scan does not.
+      - name: Scan copy of the contract (RuleExpression's recursion cut)
         run: |
           set -o pipefail
           mkdir -p zap && chmod 777 zap
+          curl -fsS http://127.0.0.1:8080/api/docs/openapi.yaml -o zap/served.yaml
+          self='{ $ref: "#/components/schemas/RuleExpression" }'
+          # Only inside RuleExpression's own definition; its uses elsewhere stay references.
+          sed '/^    RuleExpression:$/,/^    [A-Za-z][A-Za-z]*:$/ s|{ \$ref: "#/components/schemas/RuleExpression" }|{ type: object }|' \
+            zap/served.yaml > zap/contract-scan.yaml
+          cut=$(diff zap/served.yaml zap/contract-scan.yaml | grep -c '^> ' || true)
+          echo "scan copy: $cut nested RuleExpression reference(s) replaced by { type: object }" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          # Exactly the three known branches. A contract change that adds, moves or removes one
+          # must be looked at, not silently scanned with the recursion back or wrongly cut.
+          test "$cut" -eq 3
+          # The two uses outside the definition (a parameter and RuleDraftBase.expression) remain.
+          test "$(grep -cF "$self" zap/contract-scan.yaml)" -eq 2
+      # -P 8090: ZAP's own proxy listens on 8090; the API holds 8080 on the host network, and the
+      # first run logged "Cannot listen on port localhost:8080".
+      - name: ZAP API scan of the contract's operations
+        run: |
+          set -o pipefail
           # -I: warnings do not fail the step; the gates below decide.
           docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
-            zap-api-scan.py -t http://127.0.0.1:8080/api/docs/openapi.yaml -f openapi \
+            zap-api-scan.py -t /zap/wrk/contract-scan.yaml -f openapi -P 8090 \
               -O http://127.0.0.1:8080 -J zap-api.json -r zap-api.html -I 2>&1 | tee zap/zap-api.log
       # A scan is evidence only for what it reached. The contract's distinct paths are the floor:
       # fewer URLs means the import failed or was partial, and the gate fails rather than pass on
