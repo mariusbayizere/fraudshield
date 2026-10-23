@@ -319,6 +319,13 @@ takes ids, so `SKIP=google-java-format` skips nothing: on 2026-10-23 it let spot
 about 1.1 GB free, against mem-gate's 1536 MB floor. To leave the format check to CI's pre-commit
 job when memory is short, use `SKIP=spotless`, and read that job at job level.
 
+### Pushes still go through hand-joined chains: `safe-push` is not on `main`
+
+`tools/bin/safe-push` (`5640dcf`) exists only on `m8/frontend-rebase` (checked 2026-10-23), so
+this branch pushes through the governance checks joined by hand with `&&`. A failing step outside
+that chain let a commit and push proceed on 2026-10-23 (the lab notebook's fourth sighting of the
+trap). When `safe-push` reaches `main`, this branch pushes only through it.
+
 ### Identifiers claimed by this branch
 
 PB-195 to PB-199 (2026-10-23; PB-191 to PB-194 are claimed on `m9/images`). Used: PB-195 to PB-199.
@@ -381,7 +388,8 @@ the first:
 * **Ingest: run, and refused when it must.** Done for the `sustained` scenario only, on a shared
   runner in local mode only. The batch, duplicate-storm, idempotency-conflict, hold-follow-up and
   validation-mix scenarios have never run: every case's log in which users spawned (nine of ten)
-  shows their users filtered out by `--tags sustained` (PB-199). Distributed mode is not proved (PB-197).
+  shows their users filtered out by `--tags sustained` (PB-199). Distributed mode is not proved
+  (PB-197).
 * **Chaos: one experiment that injects nothing, confirmed to have selected the intended pods.**
   Cannot run: it needs a Kubernetes cluster with the manifests applied, and Chaos Mesh installed
   in its own namespace with a network policy that lets it act. Neither exists: the plan's §1

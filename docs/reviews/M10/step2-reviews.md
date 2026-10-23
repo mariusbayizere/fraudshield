@@ -69,3 +69,13 @@ seed's commit given as `6bdb77a`; "job" corrected to the workflow's run; lines r
 recheck found the filtered-scenario sentence true of nine logs of ten, not every one (the
 shape mutant spawns no user), now said. The reviewer could not verify Review 4's account of its
 rounds: no review transcripts were among its sources.
+
+## Review 6: PB-198 and PB-199 (`0f2c704`, amended to `214cf28`)
+
+Every number and identifier matched its source. Three overclaims answered: PB-199 said step 2's
+three defects were in the one scenario that ran, where they were in code all six scenarios share
+(the plateau shape, the base class's pacing, `response.js` in every scenario), and dropped that
+"after at most one request per user" is inferred from Locust's source; "none has ever sent a
+request" rested on the record, now said so; PB-198 said a duplicate publish would pass every run,
+where the allowance caps it at one per user. The recheck found nothing to change. The owner then
+asked for PB-199 to record the first point as the reason to raise its priority.

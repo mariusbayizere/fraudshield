@@ -2873,6 +2873,14 @@ into `tail -1`, so the chain went on to the push on `tail`'s status, not gitleak
 said "no leaks found", so nothing leaked through, and every later chain ran it unpiped; but for that
 push the check did not guard the step. Same trap, third sighting.
 
+**Seen again (2026-10-23, later).** Before pushing PB-198 and PB-199, a cosmetic re-wrap of one line
+in `M10_updates.md` ran as its own command, ahead of an `&&` chain that amended the commit, ran the
+checks and pushed. The re-wrap failed (its text did not match), and the amend, the checks and the
+push went ahead, because the failing step was outside the chain. What went out was identical to the
+reviewed commit, and the only effect is one line of 105 characters. Harmless output is not a working
+gate: the chain proved only that the steps inside it guarded each other. Fourth sighting, and the
+reason `tools/bin/safe-push` exists; on this date it is still not on `main`.
+
 *The entries below were written on `m4/generalisation` in September and merged on 2026-10-18;
 the notebook is append-only, so they follow later dates.*
 
