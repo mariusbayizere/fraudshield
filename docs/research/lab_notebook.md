@@ -2868,6 +2868,11 @@ not depend on its result.
 **The rule.** *A check guards a step only if the step cannot run when the check fails. Join them with
 `&&` or `set -e`, never `;` or a pipe, and confirm that a deliberately failing input stops the chain.*
 
+**Seen again (2026-10-23).** In one of M10's push chains for `m10/verification`, gitleaks was piped
+into `tail -1`, so the chain went on to the push on `tail`'s status, not gitleaks'. Its own output
+said "no leaks found", so nothing leaked through, and every later chain ran it unpiped; but for that
+push the check did not guard the step. Same trap, third sighting.
+
 *The entries below were written on `m4/generalisation` in September and merged on 2026-10-18;
 the notebook is append-only, so they follow later dates.*
 

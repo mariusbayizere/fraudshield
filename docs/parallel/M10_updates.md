@@ -310,6 +310,13 @@ run that is a worker: the master never sees 3 or 4, ends with 5 or 1, and keeps 
 loading after a key is revoked. Found by the review and confirmed by reading Locust's source, not
 observed. Step 2 ran in local mode only. **This must be fixed before any distributed run.**
 
+### Skipping the Java formatter locally: the hook id is `spotless`
+
+The pre-commit hook displayed as "google-java-format (backend)" has the id `spotless`, and `SKIP`
+takes ids, so `SKIP=google-java-format` skips nothing: on 2026-10-23 it let spotless run Maven at
+about 1.1 GB free, against mem-gate's 1536 MB floor. To leave the format check to CI's pre-commit
+job when memory is short, use `SKIP=spotless`, and read that job at job level.
+
 ### Identifiers claimed by this branch
 
 PB-195 to PB-199 (2026-10-23; PB-191 to PB-194 are claimed on `m9/images`). Used: PB-195 to PB-197.
