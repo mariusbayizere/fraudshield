@@ -319,12 +319,15 @@ takes ids, so `SKIP=google-java-format` skips nothing: on 2026-10-23 it let spot
 about 1.1 GB free, against mem-gate's 1536 MB floor. To leave the format check to CI's pre-commit
 job when memory is short, use `SKIP=spotless`, and read that job at job level.
 
-### Pushes still go through hand-joined chains: `safe-push` is not on `main`
+### Pushes go through `safe-push`
 
-`tools/bin/safe-push` (`5640dcf`) exists only on `m8/frontend-rebase` (checked 2026-10-23), so
-this branch pushes through the governance checks joined by hand with `&&`. A failing step outside
-that chain let a commit and push proceed on 2026-10-23 (the lab notebook, "A check that ran,
-failed, and did not stop the push"). When `safe-push` reaches `main`, this branch pushes only through it.
+`tools/bin/safe-push` (`5640dcf`) was only on `m8/frontend-rebase` until 2026-10-23, so this branch
+pushed through the governance checks joined by hand with `&&`, and a failing step outside that
+chain once let a commit and push proceed (the lab notebook, "A check that ran, failed, and did not
+stop the push"). It reached `main` on its own that day (branch `tools/safe-push`: `a2e08c3`, a
+cherry-pick of `5640dcf` without the rest of that branch, and `34520b3`, a note in M8B's scope), and from then on this branch pushes only through it.
+It runs nine of CI's governance checks and leaves pre-commit, gitleaks and the rest to CI, so CI is
+still read at job level after every push.
 
 ### Identifiers claimed by this branch
 
