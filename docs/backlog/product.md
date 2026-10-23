@@ -1654,7 +1654,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** independent review of `.github/workflows/{infrastructure,security,supply-chain}.yml`, 2026-10-21, before M9's merge · **Priority:** low · **Owner:** M9
 - **Problem:** found low or informational, and not fixed with the signing change:
   1. Trivy downloads its vulnerability database and its misconfiguration check bundle at run time, unpinned; `trivy image` (`supply-chain.yml`) has no retry, so a download outage reads as a failed scan.
-  2. `zap-baseline` (replaced by `zap-api`, 2026-10-23) and `images` are skipped today, and GitHub counts a skipped job as passing a required check.
+  2. `zap-baseline` and `images` are skipped today, and GitHub counts a skipped job as passing a required check. (Update, 2026-10-23, `m9/images`: both now run; `zap-baseline` is replaced by `zap-api`, and `images` builds `fraudshield-api` only, the other images get no job until their Dockerfiles exist.)
   3. `cancel-in-progress` keyed on the ref can cancel the scan and the signing of an intermediate `main` commit.
   4. No `.dockerignore` exists, and the ML images build from the repository root, so `.git` enters their build context; `actions/checkout` keeps its default `persist-credentials`, although no job needs git authentication.
   5. `${{ matrix.image }}` is interpolated into `run:` scripts; the values come from a hard-coded list, so only people who can push control them.

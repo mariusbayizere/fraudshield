@@ -110,10 +110,13 @@ M10's own list is in `docs/parallel/M10_updates.md` on `m10/verification` (`1e9e
 ## 0b. Handover: images and the API in compose (branch `m9/images`, 2026-10-23)
 
 Work on M9's deployability, on `m9/images` (worktree `~/fs-wt/m9-images`, from `main` at
-`4e0a7bc`). **Not merged**; the merge is the owner's decision. Section 0 above is the 2026-10-22
-snapshot of `main`; on this branch, three of its "never exercised" lines no longer hold: the API
-image is built, scanned and start-tested; the API is in the compose stack; and ZAP has run against
-it. Owner decisions for this work (2026-10-22): xgboost CPU-only, with unchanged scores as the
+`4e0a7bc`). Not merged when this section was written; the owner ordered the merge on 2026-10-23,
+once CI is green at job level on the final commit. Section 0 above is the 2026-10-22 snapshot of
+`main`. Its "never exercised" line is out of date on this branch in two of its four clauses:
+"the ZAP baseline has never run" (ZAP's API scan has run and reached all 89 operations; see "ZAP"
+below) and "no service image is built, scanned or signed" (the API image is built, scanned and
+start-tested; signing runs on `main` only). Nothing has been applied to a cluster, and there are
+no deploy workflows. Owner decisions for this work (2026-10-22): xgboost CPU-only, with unchanged scores as the
 condition of the lock change; the API in the `full` profile with 1 GiB, recorded as ASSUMED; build
 order endpoint, API image, API in compose, scorer image with PB-179; a migrate service for the main
 database inside the compose piece; ZAP's first findings reported before any is fixed; a start test
@@ -123,12 +126,14 @@ for every image.
 
 | Piece | Commits | Evidence |
 |---|---|---|
-| 1. `GET /api/v1/environment`, with ADR 0019's guards moved to `backend/deployment-guard` so the API runs them (ADR 0019 amendment, 2026-10-22) | `b745c83`, `42c13cc` | `IngestApiTest` (13) green in CI's java job on `abb3bf5` (job 120198691826) |
-| 2. The API image (`backend/Dockerfile`, context the repository root) with its start test | `581a752`, `42c13cc`, `c5e325a`, `4bff519` | `supply-chain` on `abb3bf5`: build, 404 MB against the 500 MB limit, start test, Trivy, SBOM (job 120198720633, run 39887407173) |
+| 1. `GET /api/v1/environment`, with ADR 0019's guards moved to `backend/deployment-guard` so the API runs them (ADR 0019 amendment, 2026-10-22) | `b745c83`, `42c13cc`, `c5e325a` (persistence tests the move required), `4bff519`, `abb3bf5` (`EnvironmentController`) | `IngestApiTest` (13) green in CI's java job on `abb3bf5` (job 120198691826) |
+| 2. The API image (`backend/Dockerfile`, context the repository root) with its start test | `581a752`, `42c13cc`, `abb3bf5` (the start test's comment) | `supply-chain` on `abb3bf5`: build, 404 MB against the 500 MB limit, start test, Trivy, SBOM (job 120198720633, run 39887407173) |
 | 3. The API in compose (`full`), after `fraudshield-migrate`, `pii-vault-migrate` and `kafka-topics-init`; `make env` key material; seed-demo uses the API's pepper | `db89bbf`, `abb3bf5` | stack job 120198728895 (run 39887407143) ran `compose-fraudshield-api.sh`: healthy after 125 s including the build; health; `{"synthetic_data":true}`; 401 without a key; a decided ingest on the rule fallback; an idempotent replay; the decision read back; `fs.transactions.raw` 0 → 1 |
 
-- **Reviews:** `docs/reviews/M9/images-review-1.md` (2 BLOCKER, both fixed) and
-  `images-review-2.md` (0 BLOCKER, 2 MAJOR, both fixed), each with an answers file. Review 2
+- **Reviews:** `docs/reviews/M9/images-review-1.md` (2 BLOCKER) and `images-review-2.md`
+  (0 BLOCKER, 2 MAJOR), each with an answers file. The answers to review 2 (`abb3bf5`) are the
+  author's: CI ran them green, and no independent review has re-examined them. Reviews 3 and 4
+  cover the ZAP job and this section. Review 2
   examined the two post-review fixes `c5e325a` and `4bff519` as items of their own and accepted
   both. `@PreAuthorize("permitAll()")` on `EnvironmentController` was removed and the class made
   final again (review 2, N1).
@@ -143,23 +148,51 @@ for every image.
 
 ### ZAP
 
-The first scan (`zap-baseline.py`, run 39887407268 on `abb3bf5`) reported one informational alert
-(Non-Storable Content on `/`, a 401 with `Cache-Control: no-store`) and passed its gate. It reached
-**4 URLs**: the spider stopped at the 401 on `/`, and no operation of the API was scanned. On the
-owner's decision (2026-10-23) the job is replaced by `zap-api`: `zap-api-scan.py` imports every
-operation from the contract the API serves (`/api/docs/openapi.yaml`), and the job fails when ZAP
-reached fewer URLs than the contract has paths (82), as well as on any High-risk alert. **It has
-not run yet** at the time of writing; its first findings are to be reported before any is fixed.
-Known limits: the scan is unauthenticated (operations behind a key or session are reached and
-answered 401 or 403, nothing behind them is exercised); the contract is OpenAPI 3.1, and how
-completely ZAP imports 3.1 is unknown until the coverage gate reads it.
+- **First scan** (`zap-baseline.py`, run 39887407268 on `abb3bf5`): one informational alert
+  (Non-Storable Content on `/`, a 401 with `Cache-Control: no-store`), gate passed. It reached
+  **4 URLs**: the spider stopped at the 401 on `/`, and no operation of the API was scanned.
+- **Second scan** (`zap-api`, `zap-api-scan.py` given the contract, run 39896801735 on `146d987`):
+  the OpenAPI import failed on the self-referring `RuleExpression` schema ("Document nesting
+  depth (1001) exceeds the maximum allowed (1000)"); the script exited 3, the step failed through
+  `pipefail`, and both gates were skipped. Red, not green; nothing was scanned.
+- **Now** (owner, 2026-10-23): ZAP scans a copy of the served contract with RuleExpression's three
+  nested references cut to a plain object, and listens on its own port (`-P 8090`). Not tested as
+  a result: nested rule expressions in the bodies of `POST /rules`,
+  `POST /rules/{rule_id}/versions` and `POST /rules/preview`; the job writes this to its summary.
+- **Third scan, the first to reach the API's operations** (`a150edc`, run 39897867857, job
+  120232689891): 3 references cut; 109 URLs imported, 282 in total against the floor of 82; 0
+  High-risk alerts; gate passed. Requests kept the `/api/v1` prefix (`-O` with the relative
+  server works). Findings, reported to the owner before any fix, none fixed here:
+  - **Low: `/verify/{token}` answers 500** to `GET /verify/token?=` (a query parameter with an
+    empty name) and to `POST /verify/token`, while the same token with `?lang=en` gets 200. A
+    server error where a client error is expected; the POST body ZAP sent is not in its report;
+    cause not investigated.
+  - **Medium (two alerts, both rule 10055): CSP on the verification page** (`default-src 'none';
+    style-src 'unsafe-inline'; form-action 'self'`): `style-src 'unsafe-inline'`, and "failure to
+    define directive with no fallback" on the same header.
+  - **Low:** the verification page lacks Cross-Origin-Embedder-Policy, Cross-Origin-Opener-Policy
+    and a Permissions-Policy header; five public endpoints lack Cross-Origin-Resource-Policy;
+    `/verify/...` returns `text/html`, which ZAP's script rule 100001 does not expect (the
+    contract itself declares `text/html` for that page).
+  - **Informational:** 277 client-error answers (mostly 401), the login request identified, a
+    user-controllable `lang` attribute on the verification page (potential XSS, low confidence),
+    `user_id` in an audit-events query string, and `no-store` on five responses.
+- **Gates:** any High-risk alert, and a coverage floor: fewer URLs than the contract has paths
+  (82). The floor reads ZAP's "Total of N URLs", which counts every URL ZAP holds after the scan,
+  not what the import reached (review 3, M1). The five actuator paths were sent to 8080 and
+  answered 401 there; their real home is the unpublished management port 8081, which was not
+  scanned (review 5, M2).
+- **Limits:** unauthenticated: in run 39897867857, 69 of 89 operations were answered 401 and
+  `POST /auth/refresh` 403. The public sign-in, registration and reset endpoints have per-IP
+  limits, and 429 answers were observed (review 5, n4). An answer of 401, 403, 404 or 429 counts
+  as reached.
 
 ### Piece 4, the scorer image: not started (owner, 2026-10-23: "not now")
 
 Nothing is built: `ml/Dockerfile` does not exist, so `supply-chain` lists `fraudshield-ml` as
 "NOT BUILT". What is decided and what remains, for whoever picks it up:
-- **Decided:** xgboost CPU-only. The CUDA build carries a shared object of about 406 MB and NCCL,
-  which the scorer never uses, and is the likely route under the 1200 MB limit. **Condition:** the
+- **Decided:** xgboost CPU-only. The CUDA build carries a shared object of about 406 MB and pulls
+  NCCL as a separate wheel, neither of which the scorer uses, and is the likely route under the 1200 MB limit. **Condition:** the
   scores are verified unchanged after the lock change; that check is the condition, not an
   afterthought.
 - **Owed with the image:** M7's licence-notice acceptance (every distribution's licence and notice

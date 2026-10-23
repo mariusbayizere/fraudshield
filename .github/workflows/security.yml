@@ -141,34 +141,47 @@ jobs:
       # nothing behind authentication is exercised.
       #
       # ZAP scans a COPY of the contract, not the contract itself. RuleExpression (the rule DSL's
-      # tree) refers to itself in its `all`, `any` and `not` branches. ZAP's OpenAPI import expands
-      # references without a depth limit and crashed on it at its first run (ca3653b..146d987, run
-      # 39896801735: "Document nesting depth (1001) exceeds the maximum allowed (1000)"). The copy,
-      # taken from what the API serves, replaces those three nested references with a plain
-      # `{ type: object }`; the contract the API serves is unchanged. NOT TESTED as a result: deep
-      # rule expressions in RuleDraft request bodies (POST /rules, /rules/preview and the rule
-      # versions). ZAP generates those bodies with an empty object where a nested expression would
-      # be, so this scan says nothing about how the API handles nested `all`/`any`/`not` trees.
-      # The rule DSL's own tests cover parsing; this scan does not.
+      # tree) refers to itself in its `all`, `any` and `not` branches. ZAP's OpenAPI import failed
+      # on it at its first run (ca3653b..146d987, run 39896801735): resolving RuleDraft, the parser
+      # hit "Document nesting depth (1001) exceeds the maximum allowed (1000)". That it expands the
+      # self-reference until that limit is INFERRED from the error. The copy, taken from what the
+      # API serves, replaces those three nested references with a plain `{ type: object }`; the
+      # contract the API serves is unchanged. NOT TESTED as a result: nested rule expressions in
+      # the request bodies of POST /rules and POST /rules/{rule_id}/versions (a RuleDraft) and
+      # POST /rules/preview (a bare RuleExpression). Below the top level, ZAP's generated bodies
+      # carry an object with no defined content where a nested expression would be (INFERRED until
+      # a run shows the requests), so this scan says nothing about how the API handles nested
+      # `all`/`any`/`not` trees. The step also writes this to the run's summary.
       - name: Scan copy of the contract (RuleExpression's recursion cut)
         run: |
           set -o pipefail
           mkdir -p zap && chmod 777 zap
           curl -fsS http://127.0.0.1:8080/api/docs/openapi.yaml -o zap/served.yaml
+          # shellcheck disable=SC2016 # a literal $ref, the YAML text being matched
           self='{ $ref: "#/components/schemas/RuleExpression" }'
           # Only inside RuleExpression's own definition; its uses elsewhere stay references.
+          # shellcheck disable=SC2016 # a sed program; $ and $ref are literal
           sed '/^    RuleExpression:$/,/^    [A-Za-z][A-Za-z]*:$/ s|{ \$ref: "#/components/schemas/RuleExpression" }|{ type: object }|' \
             zap/served.yaml > zap/contract-scan.yaml
           cut=$(diff zap/served.yaml zap/contract-scan.yaml | grep -c '^> ' || true)
-          echo "scan copy: $cut nested RuleExpression reference(s) replaced by { type: object }" \
-            | tee -a "$GITHUB_STEP_SUMMARY"
+          diff zap/served.yaml zap/contract-scan.yaml > zap/contract-scan.diff || true
+          {
+            echo "scan copy: $cut nested RuleExpression reference(s) replaced by { type: object }"
+            echo "NOT TESTED by this scan: nested rule expressions (all/any/not below the top level)"
+            echo "in the bodies of POST /rules, POST /rules/{rule_id}/versions and POST /rules/preview."
+            echo "The served contract is unchanged; the alteration is zap/contract-scan.diff."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           # Exactly the three known branches. A contract change that adds, moves or removes one
           # must be looked at, not silently scanned with the recursion back or wrongly cut.
           test "$cut" -eq 3
-          # The two uses outside the definition (a parameter and RuleDraftBase.expression) remain.
+          # The two uses outside the definition remain: /rules/preview's request body and
+          # RuleDraftBase.expression. These checks count the flow form of the reference only; they
+          # are not a cycle check, and any other recursion would still fail the import loudly.
           test "$(grep -cF "$self" zap/contract-scan.yaml)" -eq 2
-      # -P 8090: ZAP's own proxy listens on 8090; the API holds 8080 on the host network, and the
-      # first run logged "Cannot listen on port localhost:8080".
+      # -P 8090: ZAP listens on a fixed port of its own, away from the API's 8080 on the host
+      # network. The first run, without -P, logged "Cannot listen on port localhost:8080" while
+      # an add-on reinstalled during the update, though its daemon was on a free port (52391);
+      # whether that warning returns without -P is INFERRED. The fixed port settles it.
       - name: ZAP API scan of the contract's operations
         run: |
           set -o pipefail
