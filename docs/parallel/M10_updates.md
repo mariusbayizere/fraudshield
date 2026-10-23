@@ -323,8 +323,8 @@ job when memory is short, use `SKIP=spotless`, and read that job at job level.
 
 `tools/bin/safe-push` (`5640dcf`) exists only on `m8/frontend-rebase` (checked 2026-10-23), so
 this branch pushes through the governance checks joined by hand with `&&`. A failing step outside
-that chain let a commit and push proceed on 2026-10-23 (the lab notebook's fourth sighting of the
-trap). When `safe-push` reaches `main`, this branch pushes only through it.
+that chain let a commit and push proceed on 2026-10-23 (the lab notebook, "A check that ran,
+failed, and did not stop the push"). When `safe-push` reaches `main`, this branch pushes only through it.
 
 ### Identifiers claimed by this branch
 

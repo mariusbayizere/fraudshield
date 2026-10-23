@@ -2875,11 +2875,14 @@ push the check did not guard the step. Same trap, third sighting.
 
 **Seen again (2026-10-23, later).** Before pushing PB-198 and PB-199, a cosmetic re-wrap of one line
 in `M10_updates.md` ran as its own command, ahead of an `&&` chain that amended the commit, ran the
-checks and pushed. The re-wrap failed (its text did not match), and the amend, the checks and the
-push went ahead, because the failing step was outside the chain. What went out was identical to the
-reviewed commit, and the only effect is one line of 105 characters. Harmless output is not a working
-gate: the chain proved only that the steps inside it guarded each other. Fourth sighting, and the
-reason `tools/bin/safe-push` exists; on this date it is still not on `main`.
+checks and pushed. The re-wrap failed (an assertion that its target text occurred once), and the
+amend, the checks and the push went ahead, because the failing step was outside the chain. The
+pushed commit's tree was identical to the reviewed one's, and the only effect was one line of 105
+characters, re-wrapped in the next commit. Harmless output is not a working gate: the chain proved
+only that the steps inside it guarded each other. Fourth sighting by the owner's count, which takes
+the gitleaks pipe above as the third; `5640dcf`'s message calls a different case "the fourth
+variant", a checker that never ran on a usage error, joined with `;`, which this notebook does not
+record. It is the reason `tools/bin/safe-push` exists; on this date it is still not on `main`.
 
 *The entries below were written on `m4/generalisation` in September and merged on 2026-10-18;
 the notebook is append-only, so they follow later dates.*
