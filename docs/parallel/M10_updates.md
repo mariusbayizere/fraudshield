@@ -329,6 +329,8 @@ failed, and did not stop the push"). When `safe-push` reaches `main`, this branc
 ### Identifiers claimed by this branch
 
 PB-195 to PB-199 (2026-10-23; PB-191 to PB-194 are claimed on `m9/images`). Used: PB-195 to PB-199.
+PB-200 to PB-204 (2026-10-23, after reading every branch's updates files and backlog: none
+claims PB-200 or above). Used: PB-200.
 
 ### What step 2 did not cover
 
@@ -378,6 +380,31 @@ user above the count, for requests in flight when the users are stopped, which r
 not the run's statistics; that this is what the extra record is, is an inference, not read from
 the run. The cause is unestablished, and replacing the allowance with a comparison by
 `transaction_id` is PB-198.
+
+### The per-record match, first clean run (PB-198)
+
+**Not a measurement either: the same shared runner at 2 requests a second.** The harness now writes
+the `transaction_id`s it sent, accepted and replayed, and step 2 reads each passing case's records
+from `fs.transactions.raw` and names every one (`step2/reconcile.py`); it reports only, and no
+verdict changed. Run 39958911822, job 120431631136, on `c8f6aa2`, all ten cases passed:
+
+| Case | Sent | Accepted | Kafka | Records named |
+|---|---|---|---|---|
+| pass | 120 | 118 | +118 | 118 accepted; none late, duplicate, foreign or unparsed |
+| proxy with no fault | 41 | 41 | +41 | 41 accepted; none extra |
+
+Every accepted id has its record. "Sent" counts new ingests the harness recorded as about to be
+sent; Locust's 120 requests in the passing case are a different count, 118 new and 2 replays. The
+two sent ids not accepted have no recorded response or failure, which is read as requests in
+flight when the run stopped (an inference: nothing shows they left the client), and neither has a
+record.
+
+**No extra record was seen, so the classifier has had nothing to name yet.** One clean run does not
+retire the +119 of run 39942490462: its cause is still unestablished, and PB-198 stays open on it.
+The run before this one (39956259180, all cases passing) is not counted as evidence: Kafka 4.3
+printed a deprecation warning on stdout ahead of each partition's records, so each partition read
+one line more than its offsets allowed ("read 39 of 38"), and the classifier named those lines one
+foreign record and two duplicates; fixed in `6b3e094`.
 
 ### What step 2 still cannot run
 

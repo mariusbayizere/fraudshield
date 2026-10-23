@@ -87,3 +87,16 @@ reviewed one). Answered: the sighting's number now says what it counts, and name
 case `5640dcf` calls "the fourth variant"; PB-199 says `response.js` was also repeated in each of
 the five scenarios' own tasks, not only in shared code; "identical to the reviewed commit" narrowed
 to its tree; Review 6's count corrected to four points.
+
+## Review 8: the per-record match (PB-198; `bca3357`, amended to `0a09cff`, then `6b3e094`, `c8f6aa2`)
+
+Four rounds, before each run. Answered: `docker compose exec` inside the offsets loop would have
+taken the loop's stdin and read one partition of three (high; `</dev/null`); a short or failed read
+of a partition is reported as such, not as missing records; the reconciliation cannot abort the
+script; a stale ids file is removed before each case; a failed ids write is logged and changes
+nothing; driven by the after-snapshot, so a missing before-snapshot is reported; a duplicate's row
+says whether its `event_id` repeats and whether the id was replayed; `--formatter-property` instead
+of `--property`, whose deprecation warning Kafka 4.3 prints on stdout (seen in run 39956259180);
+a line whose key is not a UUID is counted apart as unparsed. Noted, not fixed: CI never runs mypy
+over `tests/performance` (filed as PB-200), and offsets are computed from position, which a stray
+line would shift.
