@@ -426,12 +426,12 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nLeadMedianMinutes` | `45` | `45` | `dataset/generator/params/fraud.yaml` |  | MATCH |
 | `\nRevAmountMultiplier` | `3.5` | `3.5` | `dataset/generator/params/fraud.yaml` |  | MATCH |
 | `\nBandWider` | `2.8` | `2.8` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nBandBlindLow` | `0.509` | `0.509` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nBandBlindLow` | `0.511` | `0.511` | derived | 0.5 plus the seed-1 run's recorded null band (shortcut_diagnosis.jsonl at 984351d) | MATCH |
 | `\nBandBlindHigh` | `0.530` | `0.530` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nFingerprintColsRead` | `three` | `three` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nFingerprintColsTotal` | `fourteen` | `fourteen` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nFurtherFeatures` | `three` | `three` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nDetectorT` | `+2.89` | `+2.89` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nDetectorT` | `+2.81` | `+2.81` | derived | (AUC - 0.5) / (band / (z * inflation)), the seed-1 run's recorded AUC and band, z and inflation as the band code had them at 984351d | MATCH |
 | `\nMarginRows` | `660` | `660` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nMarginFraud` | `two` | `two` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nSelfServiceSimDays` | `7` | `7` | `docs/srs/defect_register.md` |  | MATCH |

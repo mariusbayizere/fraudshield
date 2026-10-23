@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
+from statistics import NormalDist
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
@@ -59,6 +60,15 @@ REV_NOVELTY_REF = "ab03392"
 # The CI log that caught the MLflow alias misreading, kept whole because GitHub deletes job logs.
 FAKE_CI = "docs/research/paper/evidence/mlflow_alias_ci_90078b2.txt"
 FAKE_CI_REF = "1639d80"
+# The M2 shortcut sweep's run record, and the band code as it stood when the sweep was committed.
+SHORTCUT_RUNS = "docs/reviews/M2/shortcut_diagnosis.jsonl"
+SHORTCUT_REF = "984351d"
+STATS_PY = "dataset/src/fraudshield_dataset/realism/stats.py"
+CHECKS_PY = "dataset/src/fraudshield_dataset/realism/checks.py"
+#: The clean seed-1 run at release scale (48,597 detector rows): the notebook's "single reading".
+SEED1_TAIL = r'[^\n]*"detector_rows": "AUC 0\.510 \(band \+/-0\.011\) on 48597 rows"'
+SEED1_AUC = r'^\{"auc": ([\d.]+), "band": [\d.]+, ' + SEED1_TAIL
+SEED1_BAND = r'^\{"auc": [\d.]+, "band": ([\d.]+), ' + SEED1_TAIL
 #: PB-67's learning curve, merged to main after m4-complete; read at the commit that last
 #: touched it.
 LC = "docs/benchmarks/m4_learning_curve_{}_d8083dbc.txt"
@@ -123,6 +133,13 @@ class Derived:
     inputs: tuple[str, ...]
     compute: Callable[..., str]
     how: str
+
+
+def detector_t(auc: str, band: str, inflation: str, alpha: str) -> str:
+    """The detector's offset in analytic null standard errors, recovered from its recorded band."""
+    z = NormalDist().inv_cdf(1 - float(alpha) / 2)
+    stderr = float(band) / (z * float(inflation))
+    return f"{(float(auc) - 0.5) / stderr:+.2f}"
 
 
 def row(label: str, col: int) -> str:
@@ -1311,12 +1328,28 @@ SOURCES: dict[str, Src | Derived] = {
         FRAUD_YAML, r"reversal_scam_amount_multiplier:\s*\n\s*value: ([\d.]+)"
     ),
     "nBandWider": Src(NOTEBOOK, r"the floor is\s+\*\*([\d.]+)× wider\*\*"),
-    "nBandBlindLow": Src(NOTEBOOK, r"landing between roughly\s+([\d.]+) and [\d.]+\."),
+    "_DetectorAuc": Src(SHORTCUT_RUNS, SEED1_AUC, ref=SHORTCUT_REF),
+    "_DetectorBand": Src(SHORTCUT_RUNS, SEED1_BAND, ref=SHORTCUT_REF),
+    "_NullInflation": Src(STATS_PY, r"^CV_TREE_NULL_INFLATION = ([\d.]+)$", ref=SHORTCUT_REF),
+    "_FamilyAlpha": Src(CHECKS_PY, r"^FAMILY_ALPHA = ([\d.]+)$", ref=SHORTCUT_REF),
+    # The notebook printed 0.509, the edge under the superseded inflation of 1.3; the run's own band
+    # (inflation 1.62) puts it at 0.5 plus that band.
+    "nBandBlindLow": Derived(
+        ("_DetectorBand",),
+        lambda band: f"{Decimal('0.5') + Decimal(band):.3f}",
+        "0.5 plus the seed-1 run's recorded null band (shortcut_diagnosis.jsonl at 984351d)",
+    ),
     "nBandBlindHigh": Src(NOTEBOOK, r"landing between roughly\s+[\d.]+ and ([\d.]+)\."),
     "nFingerprintColsRead": Src(NOTEBOOK, r"The fingerprint read (three) columns of fourteen"),
     "nFingerprintColsTotal": Src(NOTEBOOK, r"The fingerprint read three columns of (fourteen)"),
     "nFurtherFeatures": Src(NOTEBOOK, r"found (three) more instances the review had missed"),
-    "nDetectorT": Src(NOTEBOOK, r"gave \*\*t = (\+[\d.]+)\*\*"),
+    # The notebook's +2.89 rounded both the AUC (0.510) and the band (0.011) before dividing.
+    "nDetectorT": Derived(
+        ("_DetectorAuc", "_DetectorBand", "_NullInflation", "_FamilyAlpha"),
+        detector_t,
+        "(AUC - 0.5) / (band / (z * inflation)), the seed-1 run's recorded AUC and band, z and"
+        " inflation as the band code had them at 984351d",
+    ),
     "nMarginRows": Src(NOTEBOOK, r"over \*\*(\d+) rows holding two confirmed fraud\*\*"),
     "nMarginFraud": Src(NOTEBOOK, r"over \*\*\d+ rows holding (two) confirmed fraud\*\*"),
     "nSelfServiceSimDays": Src(DEFECTS, r"`days_since_sim_swap` < (\d+) or unknown"),
@@ -2018,10 +2051,17 @@ CITED = re.compile(r"\\texttt\{((?:evidence|docs|dataset|ml|tools|\.github)/[^{}
 EVIDENCE_DIRS = ("docs/benchmarks/", "docs/research/paper/evidence/")
 
 
+#: The index this script writes. It is typeset, but it is output, not text that cites: scanning it
+#: kept every row it had once written alive after the citation that justified the row was removed.
+EVIDENCE_INDEX = HERE / "sections" / "generated-evidence-index.tex"
+
+
 def cited_paths() -> set[str]:
     """Every repository path cited in the typeset text, normalised to a path from the root."""
     found: set[str] = set()
     for path in _typeset():
+        if path == EVIDENCE_INDEX:
+            continue
         for raw in CITED.findall(path.read_text()):
             cited = re.sub(r"\\allowbreak\s*", "", raw).replace("\\_", "_")
             if "{" in cited or "\\" in cited:
@@ -2158,7 +2198,7 @@ def write_index(used: dict[tuple[str, str, str], int], *, check: bool) -> bool:
         values = str(count) if count else "none"
         lines.append(rf"\texttt{{{_tex_path(path)}}} & {at} & {values} \\")
     lines += [r"\bottomrule", r"\end{longtable}"]
-    path = HERE / "sections" / "generated-evidence-index.tex"
+    path = EVIDENCE_INDEX
     return emit(path, "\n".join(lines) + "\n", check=check)
 
 

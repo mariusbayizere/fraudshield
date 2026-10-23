@@ -288,6 +288,15 @@ the statistic's null spread implies, and was blind to any construction leak land
 which the same investigation replaced with 1.62; against the corrected value the factor is 2.8×.
 The argument and its direction are unchanged.)
 
+**Correction (2026-10-23).** The blind interval's lower edge above, 0.509, was not corrected with the
+factor: 0.5 + 1.96 × 1.3 × 0.00346 reproduces it exactly, so it is inferred to be the edge under the
+superseded inflation. The release-scale run's recorded band, under 1.62, is 0.01088: the seed-1 clean
+run at 1,000,000 requested rows in `docs/reviews/M2/shortcut_diagnosis.jsonl` at `984351d`, taken to be
+the 1,006,249-row run above because its seed, its 48,597 detector rows and its AUC of 0.510 match
+(inferred). The interval therefore runs from about **0.511** to 0.530, and that band implies 8,624
+positives, not "about 8,700". Found while checking the paper's figure, which now derives the edge
+from that record rather than from this entry.
+
 This inverts the problem at the two ends. Below 60,000 rows the band is too *narrow* relative to the
 observed spread (`band ÷ sd` ≈ 1.5 where 1.96 is needed), so clean datasets fail about one run in
 nine. Above 100,000 it is too *wide*, so real leaks can pass. MAJOR 1.3/1.4 replaced a fixed 0.03
@@ -327,6 +336,12 @@ implied offset scattering about zero rather than landing between +0.005 and +0.0
 
 The single-run t of +2.89 is what a floored band of 0.03 could never have revealed: it passed at
 0.010 against 0.030 with room to spare, and passes at 0.010 against 0.011 only just.
+
+**Correction (2026-10-23).** The single-run t in the table above is +2.81, not +2.89: the +2.89
+divided the AUC rounded to 0.510 by a standard error recovered from the band rounded to 0.011. With
+the run's recorded AUC (0.509622) and band (0.0108829) it is +2.81, and the ratio to the 60,000-row
+mean is about 7.6×, not 7.8×. The comparison with √n's 4.1× and the prediction built on it are
+unchanged in kind; the next entry records how the prediction fared.
 
 **Mechanism hypothesis, to be tested by ablation:** `row_position_in_file`. Fraud arrives as
 incidents — short bursts of rows sharing an account and a time — while legitimate rows are spread
@@ -377,6 +392,12 @@ within the same hour.
 this project will report. Any figure standardised against a theoretical null must say so, and any
 claim of an effect must rest on repeated draws of whatever actually varies in deployment. A result
 quoted with the wrong denominator is not conservative or aggressive, it is simply unmeasured.
+
+**Correction (2026-10-23).** The t above was computed from rounded inputs: the AUC as 0.510 and the
+standard error as 0.00346, which is the rounded band 0.011 divided back by 1.96 × 1.62. From the
+same run's recorded values (AUC 0.509622, band 0.0108829, so a standard error of 0.003428) it is
+**t = +2.81**. The conclusion stands, and the empirical spread is still more than twice the analytic
+standard error; the paper now derives t from the run record and the band code at `984351d`.
 
 ### 2026-09-19 · Two recorded predictions, both refuted by measurement
 
@@ -3216,3 +3237,22 @@ defect the paper exists to avoid, made by the paper itself.
 The same check found three evidence commits named in the paper (`c59da11`, `6b36fc5`, `2a876d8`,
 pre-rebase learning-curve stamps) reachable from no branch or tag and past git's prune window; they
 are now held by the local tag `evidence/pb67-pre-rebase`, to be pushed.
+
+### 2026-10-23 · An index that cited itself, while the audit reported nothing wrong
+
+Appendix D, the evidence index, is written by `audit_numbers.py`, which adds a row for every
+evidence file the typeset text cites. It found those citations by scanning every typeset file, and
+the index it had written is one of them. So a row, once written, cited its own file, and survived
+after the sentence that justified it was removed: `docs/benchmarks/hardware.md` stayed in the index,
+with no value read from it, after the paper stopped citing it. The audit reported 0 problems the
+whole time, because the check that should have dropped the row read the row as its justification.
+
+It is a check justified by its own output: the scan read the index as a citation, so a row, once
+written, could never be dropped, although the audit could still report a cited file that was missing.
+It is close kin to the guard with two doors this notebook keeps finding, not the same shape: there the
+guard watches one artefact while the claim lives in another; here the guard read its own output as
+evidence. The scan now skips the file it writes (PB-143), and the
+stale row is gone. The same evening, a check of two figures the paper quoted from this notebook
+found both stale (the band's lower edge and the detector's t, corrected in their entries above):
+an audit that matches a number against the document it came from verifies the copy, not the
+arithmetic, and passed both.

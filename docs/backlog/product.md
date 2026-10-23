@@ -1557,3 +1557,15 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   next to its evidence file, under the same evidence stamp and fingerprint, and the evidence file
   names that artefact. A test fails if an evaluation command completes without writing it. Test-period
   scores are subject to the test-set access log like any other read.
+
+### PB-143 · The paper's evidence index kept its own rows alive, and the audit reported nothing
+- **Source:** M11, 2026-10-23: `docs/benchmarks/hardware.md` stayed in Appendix D after the paper
+  stopped citing it · **Priority:** high · **Due:** M11 (the code fixed on `m11/paper` the same day; the row closes with the test)
+- **Problem:** `audit_numbers.py` adds an index row for every evidence file the typeset text cites,
+  and found citations by scanning every typeset file, including `generated-evidence-index.tex`, the
+  index it writes. A row, once written, cited its own file and survived the removal of the citation
+  that justified it. The audit reported 0 problems throughout: the check and the thing it checked
+  shared an input (lab notebook, 2026-10-23).
+- **Acceptance:** the citation scan skips the index it writes (done: `EVIDENCE_INDEX` in
+  `audit_numbers.py`), and a test fails if a row whose only citation is the index itself survives a
+  regeneration. The test is not yet written.

@@ -407,7 +407,7 @@ PB-140 (`m8/frontend-rebase`, M8's block `PB-131`–`PB-140`).
 
 | Kind | Reserved for M11 | Used |
 |---|---|---|
-| Backlog | `PB-141`–`PB-150` | `PB-141` (the reversal-scam test checks payee-list membership, not novelty), `PB-142` (evaluations keep per-row scores) |
+| Backlog | `PB-141`–`PB-150` | `PB-141` (the reversal-scam test checks payee-list membership, not novelty), `PB-142` (evaluations keep per-row scores), `PB-143` (the evidence index kept its own rows alive) |
 
 ## 12. PB-141 decided, 2026-10-19
 

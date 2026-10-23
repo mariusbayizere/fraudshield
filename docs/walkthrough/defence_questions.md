@@ -202,7 +202,8 @@ We used the wrong denominator, and repeated seeds caught it. A single 1,006,249-
 shortcut-detector AUC of 0.510. (That run and every figure in this answer are from the pre-PB-29
 draw, and are kept as they were read, because this answer is about what was believed and why it was
 wrong. The current dataset reads 0.509 — the same ordinary reading, from a different draw.) Standardised against the *analytic* null standard error of 0.00346
-that is t = +2.89, and we recorded a prediction that it signalled a real construction signal in the
+that is t = +2.81 (an earlier version of this answer said +2.89, computed from the AUC and the
+band both rounded; lab notebook, 2026-10-23), and we recorded a prediction that it signalled a real construction signal in the
 generator. Five seeds at the same scale then gave 0.5096, 0.4916, 0.5070, 0.5119 and 0.5044: the
 seed-to-seed standard deviation is 0.0079, more than twice the analytic figure, and 0.510 is simply
 the second-highest of five ordinary readings. Pooled across every scale above the dataset's minimum,

@@ -527,11 +527,15 @@
 \newcommand{\nLeadMedianMinutes}{\meas{45}}   % fraud.yaml takeover_lead_median_minutes
 \newcommand{\nRevAmountMultiplier}{\meas{3.5}}  % fraud.yaml reversal_scam_amount_multiplier
 \newcommand{\nBandWider}{\meas{2.8}}          % notebook: the floor is 2.8x wider than the band
-\newcommand{\nBandBlindLow}{\meas{0.509}}\newcommand{\nBandBlindHigh}{\meas{0.530}}
+\newcommand{\nBandBlindLow}{\meas{0.511}}\newcommand{\nBandBlindHigh}{\meas{0.530}}
 
 \newcommand{\nFingerprintColsRead}{\meas{three}}\newcommand{\nFingerprintColsTotal}{\meas{fourteen}}
 \newcommand{\nFurtherFeatures}{\meas{three}}   % notebook: three more instances of the flaw
-\newcommand{\nDetectorT}{\meas{+2.89}}         % notebook: t from the analytic null
+% Derived in audit_numbers.py from the M2 sweep's seed-1 run at release scale
+% (shortcut_diagnosis.jsonl at 984351d) and the band code then: the offset in analytic null SEs,
+% and the band's lower edge. The notebook's +2.89 rounded both inputs; its 0.509 is the edge under
+% the superseded inflation of 1.3 (inferred from the arithmetic, which reproduces it exactly).
+\newcommand{\nDetectorT}{\meas{+2.81}}
 \newcommand{\nMarginRows}{\meas{660}}\newcommand{\nMarginFraud}{\meas{two}}
 \newcommand{\nSelfServiceSimDays}{\srcd{7}}      % resolution D-25
 \newcommand{\nSelfServiceDeviceHours}{\srcd{24}}  % resolution D-25
