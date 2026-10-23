@@ -255,9 +255,9 @@ does not let M10 start early.
 
 - **Memory.** Java builds, Testcontainers suites and anything that loads models run on GitHub
   Actions. Locally, only unit tests run, through `tools/bin/mem-gate`, one at a time.
-- **Pushing.** Pushes go through `tools/bin/safe-push` only. It is on `m8/frontend-rebase` and
-  not yet on `main`, so until M8 merges, M8B runs it from that worktree. That is how PB-66's
-  pushes ran.
+- **Pushing.** Pushes go through `tools/bin/safe-push` only. It was on `m8/frontend-rebase` alone
+  at first, and M8B ran it from that worktree, which is how PB-66's pushes ran; on 2026-10-23 it
+  was brought to `main` on its own (`tools/safe-push`, a cherry-pick of `5640dcf`).
 - **Review.** Each phase gets an independent review. Each concurrency or cache contract (P2-a,
   P4-b, P5-b, P2-f) is reviewed before its code.
 
