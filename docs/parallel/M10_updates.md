@@ -295,9 +295,10 @@ and 30 of 39 through the proxy (76.9%). That the reason is the missing rate, rat
 else confined to those currencies, is still read from the code, since the 503 does not say.
 
 The fix was on `fix/demo-fx-rates` when this was written: the demo seed inserts the country packs'
-fixed simulation rates. It merged as `4ce8d4b`, and the re-run with it is recorded below. The harness was not restricted
-to RWF; the owner's words: *"Restricting the harness to RWF would make step 2 green while drifting
-from the specified currency mix"* (2026-10-23).
+fixed simulation rates. It is on `main` as `6bdb77a` (with a test rename, `4ce8d4b`), and the re-run
+with it is recorded below. The harness was not restricted to RWF; the owner's words: *"Restricting
+the harness to RWF would make step 2 green while drifting from the specified currency mix"*
+(2026-10-23).
 
 The harness's failure messages now carry the problem's type, title and detail, and the request's
 currency, so failures group by currency in the run's own failure table. With today's API the detail
@@ -330,10 +331,12 @@ Every measured row of the plan stays unmeasured; see the plan's §2.
 ## Step 2 re-run with the FX seed (2026-10-23)
 
 **This is not a measurement: it ran on a shared runner at 2 requests a second.** It shows that the
-ingest harness runs end to end against the API with the specified currency mix, and no figure
-below is evidence for any requirement row.
+ingest harness's `sustained` scenario runs end to end against the API with the specified currency
+mix, and no figure below is evidence for any requirement row. It is the only scenario step 2 runs
+(`prove-harness.sh` passes `--tags sustained`); the other five have never run (below).
 
-The seed merged to `main` as `4ce8d4b` (PB-195). The passing case's refusals:
+The seed is on `main` as `6bdb77a`, with a test rename on top, `4ce8d4b` (PB-195). The passing
+case's refusals:
 
 | Run | Commit | Seed | New ingests refused (passing case) |
 |---|---|---|---|
@@ -358,7 +361,7 @@ artifact `m10-step2-ingest`:
 | environment without the flag | 3 (3) | forwarded 0 | pass |
 | environment answers 503 | 3 (3) | forwarded 0 | pass |
 | nothing listening | 3 (3) | nothing sent; Kafka +0 | pass |
-| key revoked mid-run | 4 (4) | stopped 4 s into a 60 s run; forwarded 10 | pass |
+| key revoked mid-run | 4 (4) | stopped 4 s into a 60 s run; forwarded 10, the preflight's key check included | pass |
 | proxy with no fault | 0 (0) | 42 new ingests, 0 failures. CDF 9, KES 8, RWF 10, TZS 8, UGX 7 | pass |
 | mutant: shape defect | 5 (5) | nothing sent | pass |
 | mutant: pacing defect | 6 (6) | 2 requests sent, then the task raised ("TASK RAISED" in its log); Kafka +2 | pass |
@@ -370,20 +373,27 @@ the run.
 
 ### What step 2 still cannot run
 
-**A green `m10-harness` job is not a finished step 2.** The plan's step 2 (§3) has three legs, and
-this job runs only the first:
+**A green `m10-harness` run is not a finished step 2.** The plan's step 2 (§3) has three legs, and
+the workflow's one job ("M10 step 2 (ingest harness runs, and fails when it must)") runs part of
+the first:
 
-* **Ingest: run, and refused when it must.** Done, as above, on a shared runner in local mode
-  only; distributed mode is not proved (PB-197).
+* **Ingest: run, and refused when it must.** Done for the `sustained` scenario only, on a shared
+  runner in local mode only. The batch, duplicate-storm, idempotency-conflict, hold-follow-up and
+  validation-mix scenarios have never run: every case's log in which users spawned (nine of ten)
+  shows their users filtered out by `--tags sustained`. Distributed mode is not proved (PB-197).
 * **Chaos: one experiment that injects nothing, confirmed to have selected the intended pods.**
   Cannot run: it needs a Kubernetes cluster with the manifests applied, and Chaos Mesh installed
-  in its own namespace with a network policy that lets it act. Neither exists: there is no
-  cluster, so the manifests on `main` (`infrastructure/k8s`) have never been applied. Cases 02 to
-  04 also need the data-store manifests, which are not written (plan §1).
-* **Journeys: one journey on one browser.** Cannot run: it needs M8's console screens and M8B's
-  analyst API on `main`. Neither milestone has merged: `m8/frontend` is 37 commits ahead of
-  `main`, and of M8B only P1's analyst reads are on `main`, with `m8b/analyst-api` 53 commits
-  ahead (counted 2026-10-23).
+  in its own namespace with a network policy that lets it act. Neither exists: the plan's §1
+  records the manifests as never applied and Chaos Mesh as not installed, and the owner's brief for
+  step 2 says "there is no scorer image, no cluster, no data-store manifests and no Chaos Mesh
+  namespace". Cases 02 to 04 also need the
+  data-store manifests, which are not written (plan §1); the manifests on `main`
+  (`infrastructure/k8s`) include none.
+* **Journeys: one journey on one browser.** Cannot run. The plan's §1 names M8's console screens
+  (every route a placeholder on `m8/frontend`); the owner named M8B as well on 2026-10-23 ("the
+  journeys need M8 and M8B"), which the plan does not list. Neither milestone has merged:
+  `m8/frontend` is 37 commits ahead of `main`, and of M8B only P1's analyst reads are on `main`,
+  with `m8b/analyst-api` 53 commits ahead (counted 2026-10-23).
 
 Until those two legs run, the chaos and journey harnesses have not been proved able to fail, and
 the plan allows no measured row before each harness has been (§4).

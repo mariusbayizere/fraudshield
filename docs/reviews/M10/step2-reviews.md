@@ -50,11 +50,22 @@ only (D-21). Recorded in PB-195.
 
 ## Review 4: the accepted-currency split (`dd36b91`, amended to `7e0c418`, before it ran)
 
-No blocking findings in either round. Answered in the amended commit: a statistics reset now
-clears the split too (the review named `reset_stats`; checking Locust's source showed that
-`--reset-stats` resets on spawning complete without firing it, so both are handled, and the
-recheck confirmed the two stay together); the passing case requires at least 60 accepted, so that "a missing
-currency is a finding, not chance" holds (below 1e-5 at 60); "accepted" narrowed to what the harness
-counts as a success; and the split described as a local run's, since in a distributed run a
-worker's `accepted_new` covers only its last report to the master (PB-197). Nits: a variable made
-local, the script's case table, the commit subject, a line re-wrapped.
+No blocking findings in either round. Answered in the amended commit: a statistics reset now clears
+the split too (the review named `reset_stats`; checking Locust's source showed that `--reset-stats`
+resets on spawning complete without firing it, so both are handled, and the recheck confirmed the
+two stay together); the passing case requires at least 60 accepted, so that "a missing currency is a
+finding, not chance" holds (below 1e-5 at 60); "accepted" narrowed to what the harness counts as a
+success; and the split described as a local run's, since in a distributed run a worker's
+`accepted_new` covers only its last report to the master (PB-197). Nits: a variable made local, the
+script's case table, the commit subject, a line re-wrapped.
+
+## Review 5: the re-run's record in `M10_updates.md` (`9f33452`), against the run's artifact
+
+Every number matched its source. Answered: the record claimed "the ingest harness" where only the
+`sustained` scenario ran (the other five are filtered out by `--tags sustained` and have never
+run), now said in both places; the M8B prerequisite and "no cluster" attributed to the owner, as the
+plan does not state them; the key-revoked row's count of 10 noted as including the key check; the
+seed's commit given as `6bdb77a`; "job" corrected to the workflow's run; lines re-wrapped. The
+recheck found the filtered-scenario sentence true of nine logs of ten, not every one (the
+shape mutant spawns no user), now said. The reviewer could not verify Review 4's account of its
+rounds: no review transcripts were among its sources.
