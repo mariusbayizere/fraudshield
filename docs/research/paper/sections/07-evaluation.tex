@@ -482,8 +482,9 @@ explanation algorithm rather than of the data: exact TreeSHAP costs $O(TLD^2)$ f
 most $L$ leaves and depth $D$ \cite{lundberg2020trees}. The leaves a tree actually grows depend on
 the data, and only this benchmark was measured, so that inference is not tested.
 
-The result needs to be kept in proportion. Every configuration explains a decision in about a
-millisecond or less at the median on the runner. That is the cost of one booster's
+The result needs to be kept in proportion. At the median on the runner, explanation adds at most
+\nFrCostE{}~ms to a prediction, and prediction with explanation takes at most \nFrShapE{}~ms, both
+in the largest configuration (Table~\ref{tab:frontier}). That is the cost of one booster's
 explanation in one process; the serving path's latency against the specification's budget is
 \deferredmachine{}. Whether explanation cost binds at throughput or at the latency of a single
 request is therefore not established here. The ratio depends on the grid: it is measured from the cheapest configuration tried, and a different smallest configuration

@@ -165,8 +165,9 @@ The controls, and why each exists:
         per-channel null signatures must not reveal the label. The account-event check exists
         because of a leak found in that secondary table rather than in the feature matrix: in its
         first version, events whose timestamp carried a fractional second sat on fraud accounts far
-        more often than the base rate (the dataset review records the shares as the probe printed
-        them, but no stamped output file was kept; Section~\ref{sec:discussion}).
+        more often than the base rate (the response to the dataset review,
+        \texttt{docs/\allowbreak reviews/\allowbreak M2/\allowbreak dataset-\allowbreak response.md},
+        records the shares as the probe printed them, but no stamped output file was kept).
   \item \textbf{Label noise} in both directions, measured at \nLabelNoiseMissed{} missed and
         \nLabelNoiseFalse{} false labels as a share of true fraud on the evaluation draw.
   \item \textbf{Temporal placement}: the novel sub-variant occurs only in the test period
