@@ -1607,3 +1607,5 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   row 1 says it is not hardware-blocked and that a runner's capacity at 5,000,000 rows is untested;
   rows 6 and 7 are unchanged. Each reworded row is checked against `m10_plan.md` and ADR 0010 before
   it is committed, and no other section's "deferred to M10" is left contradicting them.
+- **Progress (2026-10-24):** reworded on `m11/paper` in `d41bb8a`, with one review round against
+  `m10_plan.md` and ADR 0010; open until the reword is merged.
