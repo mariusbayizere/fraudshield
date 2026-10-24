@@ -589,15 +589,7 @@ in the evidence file rather than here.
 
 \begin{itemize}
   \item The value of Isolation Forest routing for novelty: not measured.
-    \item Scoring latency of the serving path: not measured for the gate. The only latency runs were
-        on shared development hardware, which ADR 0010 does not accept for gate figures;
-        \deferredmachine{}.
-  \item Shadow-mode AUC delta: not measured. No shadow comparison has produced one (ADR 0035); it
-        needs a deployment running the shadow comparator for its full window, which does not exist
-        (Appendix~\ref{app:deferred}).
-  \item End-to-end decision latency and throughput at the specified load: not measured for the
-        gate. The only runs were on shared development hardware, which ADR 0010 does not accept for
-        gate figures, and with the scorer replaced by a stand-in that answers at once, so model inference was in neither
-        (ADR 0059). It waits for a dedicated benchmark machine and for the integrated system running
-        the real scorer (Appendix~\ref{app:deferred}).
+  \item Scoring latency of the serving path, the shadow-mode AUC delta, and end-to-end decision
+        latency and throughput at the specified load: not measured; what each waits for is in
+        Appendix~\ref{app:deferred}.
 \end{itemize}

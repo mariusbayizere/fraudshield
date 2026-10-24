@@ -101,10 +101,7 @@ defect its fixtures shared, are reported in Appendix~\ref{app:engineering}.
 \paragraph{Latency.} No latency figure here is a gate figure. The frontier is a difference of
 medians on a GitHub-hosted runner, a virtual machine on shared hardware; an earlier laptop run's
 \nPctlTail{}th percentile was not credible, and neither machine's tail is used. Serving and
-end-to-end latencies have not been measured for the gate: the only runs were on shared development
-hardware, which ADR 0010 does not accept for gate figures, and the end-to-end runs replaced the
-scorer with a stand-in that answers at once (ADR 0059). The gate measurement is
-\deferredmachine{}. End to end also waits for the integrated system with the real scorer.
+end-to-end latencies have not been measured for the gate (Appendix~\ref{app:deferred}).
 
 \paragraph{Intervals assume independence the data do not have.} Much of the fraud on this benchmark is staged as
 multi-row incidents on one account, and an account's rows share its history, so test rows are not

@@ -48,9 +48,9 @@ holds a transaction for an analyst is resolved by webhook, not by an open reques
 budget per API key is an assumed configuration value, derived from the specified system throughput,
 not a requirement or an observation (ADR~0058). Scores are calibrated probabilities from a weighted
 XGBoost and LightGBM ensemble, and every flagged decision carries an exact TreeSHAP explanation. The
-scoring service's and the decision engine's latencies have not been measured for the gate: the only
-runs were on shared development hardware, which ADR 0010 does not accept for gate figures. The gate
-measurement is \deferredmachine{}. No latency figure from those runs is stated here.
+scoring service's and the decision engine's latencies have not been measured for the gate, and no
+latency figure for either is stated here (Section~\ref{sec:evaluation},
+Appendix~\ref{app:deferred}).
 
 \paragraph{What is not in scope.} Graph-based features (the specification's later phases),
 real customer data of any kind, and any claim about a real institution, regulator or deployment.
