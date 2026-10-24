@@ -37,7 +37,7 @@ none (PB-72).
 \subsection*{The verification effort was blind in one direction}
  The scoring client was reviewed
 \nFakeReviews{} times (a principal review, a re-review of its fixes, a verification pass and an
-adversarial pass over the promotion path, each by an agent), and the reviewers found \nFakeDefects{} defects in the
+adversarial pass over the promotion path), and the reviewers found \nFakeDefects{} defects in the
 model-promotion path between them, while the suite passed locally with its real-registry test skipped,
 since nothing that runs without Docker touches a real server (\texttt{docs/\allowbreak parallel/\allowbreak
 M5\_updates.md}). None found that the client misread how the model registry reports an unset alias,
