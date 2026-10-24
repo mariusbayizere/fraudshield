@@ -71,7 +71,8 @@ of the specified ensemble over a single XGBoost model was detected here, the ben
 what the ensemble adds.
 
 \paragraph{Scale and volume.} Results are at \nRowsDrawB{} rows or fewer, not the \nSpecRows{} the
-specification requires, a scale that is \deferred{M10}. Every figure is stated at its scale. The failing gate metrics (recall and false-negative rate at the flag threshold) did not
+specification requires; no run at that scale has been made, though it needs no dedicated machine
+(Appendix~\ref{app:deferred}). Every figure is stated at its scale. The failing gate metrics (recall and false-negative rate at the flag threshold) did not
 close in any run measured, from \nLcTrainA{} training rows up to all \nFvTrainRows{} rows of the
 training period (Section~\ref{sec:volume}). The training period ends there, so more data of this
 draw cannot be tried; whether another model, or another draw, would close the gap is not tested.
@@ -102,7 +103,8 @@ medians on a GitHub-hosted runner, a virtual machine on shared hardware; an earl
 \nPctlTail{}th percentile was not credible, and neither machine's tail is used. Serving and
 end-to-end latencies have not been measured for the gate: the only runs were on shared development
 hardware, which ADR 0010 does not accept for gate figures, and the end-to-end runs replaced the
-scorer with a stand-in that answers at once (ADR 0059). The gate measurement is \deferred{M10}.
+scorer with a stand-in that answers at once (ADR 0059). The gate measurement is
+\deferredmachine{}. End to end also waits for the integrated system with the real scorer.
 
 \paragraph{Intervals assume independence the data do not have.} Much of the fraud on this benchmark is staged as
 multi-row incidents on one account, and an account's rows share its history, so test rows are not

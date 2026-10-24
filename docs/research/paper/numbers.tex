@@ -34,6 +34,10 @@
 \newcommand{\notyet}[1]{\emph{not yet measured (#1)}}
 % \deferred{Mx}: owned by a later milestone and listed, with the reason, in Appendix E.
 \newcommand{\deferred}[1]{\emph{deferred to #1} (Appendix~\ref{app:deferred})}
+% \deferredmachine: a performance gate figure, which ADR 0010 admits only from a dedicated machine
+% recorded in hardware.md; none exists, and the machine is necessary, not sufficient.
+\newcommand{\deferredmachine}{\emph{deferred}: it needs, among other things, a dedicated benchmark
+  machine, and none exists (Appendix~\ref{app:deferred})}
 % \prespec{prediction}{date}{evidence}{date}: a prediction's first commit, an ancestor of its
 % evidence's first commit, with UTC author dates; audit_numbers.py checks the order and the dates.
 % \notprespec{prediction}{evidence}: the prediction's first commit is the evidence's or a later one.

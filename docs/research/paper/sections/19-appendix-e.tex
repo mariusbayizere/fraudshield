@@ -1,34 +1,54 @@
 \section{Measurements deferred or not yet done}
 \label{app:deferred}
 
-The items below are owned by a later milestone (M10) or by this one (M11) and not yet done, each
-with the reason it is not measured here; the text marks each place a later milestone's result would
-appear with \emph{deferred}. The measurements
+The items below are not measured here, and each row says what it waits for rather than only which
+milestone it belongs to. The performance figures need, among other things, a dedicated benchmark
+machine, because ADR 0010 admits performance gate figures only from one whose specification is
+recorded when it is used. The verification campaign (milestone M10) specifies that machine
+(\url{https://github.com/mariusbayizere/fraudshield/blob/15a5ad6/docs/benchmarks/m10_machine_spec.md}),
+none has been provisioned, and whether and how to provision it is an open decision of the project's
+owner; the campaign also waits for the system's milestones to be merged. The shadow-mode AUC
+difference is not a hardware question; it needs a deployment running the shadow comparator for its
+full window, which does not exist. The run at the specification's scale needs no dedicated machine
+and has not been made. The last items belong to this milestone (M11) and are not yet done. The text
+marks each performance figure that waits for the machine as \emph{deferred}, and says where each
+other item is not measured. The measurements
 the specification asks of the model evaluation itself, including full-volume training, alert
 budgets, results by month, a cost curve and a partial fairness report, are reported in
 Sections~\ref{sec:evaluation} and~\ref{sec:ethics}; the one not measured, the value of Isolation
 Forest routing for novelty, is listed there. No value is estimated in place of any of them.
 
 \begin{small}
-\begin{longtable}{p{0.4\linewidth}p{0.07\linewidth}p{0.4\linewidth}}
+\begin{longtable}{p{0.37\linewidth}p{0.11\linewidth}p{0.4\linewidth}}
 \toprule
-Measurement & Owner & Why it is not here \\
+Measurement & Milestone & Why it is not here \\
 \midrule
 \endhead
-Every result at the specification's \nSpecRows{}-row scale & M10 & The benchmark draws used here are
-smaller; every result is reported at its stated scale (Section~\ref{sec:dataset}). \\
+Every result at the specification's \nSpecRows{}-row scale & M10 & Not run. It is an accuracy run,
+not a performance benchmark, so it needs no dedicated machine. Producing the data and producing the
+results are separate steps: the dataset workflow that generates a draw has to be registered from
+the repository's default branch, where it now is, but no dispatch has confirmed that it runs at this
+scale; and no run that trains and evaluates at this scale exists, so whether a standard
+GitHub-hosted runner can hold the feature caches is untested. Every result here is reported at its
+stated scale (Section~\ref{sec:dataset}). \\
 Latency of the online feature path at its \nPctlFeature{}th percentile, against the
-\nFeatureLatencyTarget{}~ms target & M10 & Latency percentiles are admissible only from a dedicated
-machine (ADR 0010); none was available. \\
-Gate-admissible latency of the scoring service, and the shadow-mode AUC difference & M10 & Not
-measured for the gate: the only latency runs were on shared development hardware, which ADR 0010
-does not accept for gate figures; no shadow comparison has produced an AUC delta (ADR 0035). \\
-End-to-end decision latency and throughput at the specified load & M10 & Not measured for the gate:
-the only runs were on shared development hardware, which ADR 0010 does not accept for gate figures,
-with the scorer replaced by a stand-in that answers at once (ADR 0059). \\
+\nFeatureLatencyTarget{}~ms target & M10 & Needs, among other things, the dedicated benchmark
+machine: latency percentiles count for the gate only from one (ADR 0010), and none exists. Because
+the target includes the feature-store fetch, it also needs a deployed feature store. \\
+Gate-admissible latency of the scoring service & M10 & Needs, among other things, the dedicated
+benchmark machine and a deployed scorer: the only latency runs were on shared development hardware,
+which ADR 0010 does not accept for gate figures. \\
+The shadow-mode AUC difference & M10 & Not a hardware question: an accuracy figure that needs a
+deployment running the shadow comparator for its full window, which does not exist; no shadow
+comparison has produced one (ADR 0035). \\
+End-to-end decision latency and throughput at the specified load & M10 & Needs the dedicated
+benchmark machine and the integrated system running the scoring milestone's real scorer: the only
+runs were on shared development hardware, which ADR 0010 does not accept for gate figures, with the
+scorer replaced by a stand-in that answers at once (ADR 0059). \\
 The latency--explainability frontier at the \nPctlTail{}th percentile, for the ensemble in the
-multi-process service, against the \nLatencyPNineNineShap{}~ms constraint & M10 & The frontier here is
-one booster in one process on a shared GitHub-hosted runner, reported at the median only
+multi-process service, against the \nLatencyPNineNineShap{}~ms constraint & M10 & Needs, among other
+things, the dedicated benchmark machine and the multi-process scoring service deployed: the frontier
+here is one booster in one process on a shared GitHub-hosted runner, reported at the median only
 (Section~\ref{sec:evaluation}). \\
 One command that regenerates the dataset, trains, evaluates and builds every table and figure from a
 clean machine & M11 & Not built; each figure is reproduced by the command recorded in its evidence

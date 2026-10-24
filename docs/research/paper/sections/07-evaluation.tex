@@ -65,7 +65,8 @@ the expected calibration error over \nEceBins{} equal-mass bins is \nGateECE{}. 
 \nGateTotal{}: the other \nGateUnmeasured{}, inference latency at the \nPctlTail{}th percentile and the
 shadow-mode AUC delta, need the scoring service. Its latency has not been measured for the gate:
 the only runs were on shared development hardware, which ADR 0010 does not accept for gate figures.
-No shadow comparison has produced an AUC delta (ADR 0035). Both are \deferred{M10}.
+The latency is \deferredmachine{}. No shadow comparison has produced an AUC delta (ADR 0035);
+that needs a deployment running the shadow comparator for its full window, which does not exist.
 
 The recall miss is recorded as a finding at this training volume, with the threshold unchanged and
 nothing tuned on the test period (ADR 0031). It holds for the flag threshold and for every
@@ -484,8 +485,8 @@ the data, and only this benchmark was measured, so that inference is not tested.
 The result needs to be kept in proportion. Every configuration explains a decision in about a
 millisecond or less at the median on the runner. That is the cost of one booster's
 explanation in one process; the serving path's latency against the specification's budget is
-\deferred{M10}, so whether explanation cost binds at throughput or at the latency of a single request
-is not established here. The ratio depends on the grid: it is measured from the cheapest configuration tried, and a different smallest configuration
+\deferredmachine{}. Whether explanation cost binds at throughput or at the latency of a single
+request is therefore not established here. The ratio depends on the grid: it is measured from the cheapest configuration tried, and a different smallest configuration
 would give a different ratio; the growth with trees and depth is the finding, not the number. And
 it is one machine's median. If the growth holds on serving hardware, then on data like this the explanation
 budget (the latency the specification allows for an explained decision), not the accuracy target, would choose the tree configuration; that is not yet shown.
@@ -496,7 +497,7 @@ explaining cannot be faster than not explaining. We attributed that tail to sche
 shared machine; the jitter itself was not measured. The runner's tail figures, in the evidence file,
 are from a virtual machine on shared hardware, so they are not used either. The
 \nLatencyPNineNineShap{}~ms constraint therefore cannot be applied from either run; the
-\nPctlTail{}th-percentile frontier on a dedicated machine is \deferred{M10}. The run is also limited to one model family (not the ensemble) and one process (not
+\nPctlTail{}th-percentile frontier is \deferredmachine{}. The run is also limited to one model family (not the ensemble) and one process (not
 the specified multi-process service), and it pays the SHAP cost on every row, whereas in serving it
 is paid only on flagged transactions.
 
@@ -588,12 +589,15 @@ in the evidence file rather than here.
 
 \begin{itemize}
   \item The value of Isolation Forest routing for novelty: not measured.
-    \item Shadow-mode AUC delta and scoring latency of the serving path: not measured for the gate.
-        The only latency runs were on shared development hardware, which ADR 0010 does not accept
-        for gate figures, and no shadow comparison has produced an AUC delta (ADR 0035);
-        \deferred{M10}.
+    \item Scoring latency of the serving path: not measured for the gate. The only latency runs were
+        on shared development hardware, which ADR 0010 does not accept for gate figures;
+        \deferredmachine{}.
+  \item Shadow-mode AUC delta: not measured. No shadow comparison has produced one (ADR 0035); it
+        needs a deployment running the shadow comparator for its full window, which does not exist
+        (Appendix~\ref{app:deferred}).
   \item End-to-end decision latency and throughput at the specified load: not measured for the
         gate. The only runs were on shared development hardware, which ADR 0010 does not accept for
         gate figures, and with the scorer replaced by a stand-in that answers at once, so model inference was in neither
-        (ADR 0059); \deferred{M10}.
+        (ADR 0059). It waits for a dedicated benchmark machine and for the integrated system running
+        the real scorer (Appendix~\ref{app:deferred}).
 \end{itemize}

@@ -70,18 +70,18 @@ repository and disagree with:
         with the held-out country, a contribution not measured. A test
         checks that no fraud parameter is keyed by country, and we infer that the country null
         follows from that and the variant null from the variant's multi-row shape; no experiment
-        isolates either cause. Every result at the specification's \nSpecRows{}-row scale is
-        \deferred{M10}.
+        isolates either cause. No result is at the specification's \nSpecRows{}-row scale; that run
+        needs no dedicated machine but has not been made (Appendix~\ref{app:deferred}).
   \item \textbf{The latency--explainability frontier} (Section~\ref{sec:evaluation}): how the
         median cost of an exact TreeSHAP explanation changes across tree complexity, reported at the
         median only, because the runner's tail comes from shared hardware and an earlier run's
         \nPctlTail{}th percentile was not credible: in
         \nFrontNegative{} configurations it showed a negative explanation cost. It is a measurement
-        of one model on one shared machine. M10 would add the
-        frontier the specification defines: the single-request \nPctlTail{}th percentile of the
-        ensemble with exact TreeSHAP, in the multi-process scoring service, on dedicated hardware,
-        and whether the \nLatencyPNineNineShap{}~ms constraint binds; it would not test our
-        inference that the cost does not depend on the data, which needs another benchmark.
+        of one model on one shared machine. The frontier the specification defines, the single-request
+        \nPctlTail{}th percentile of the ensemble with exact TreeSHAP in the multi-process scoring
+        service, and whether the \nLatencyPNineNineShap{}~ms constraint binds, need among other things
+        a dedicated benchmark machine, which has not been provisioned. Measuring them would not test
+        our inference that the cost does not depend on the data, which needs another benchmark.
 \end{enumerate}
 The redundancy finding of the first contribution is stated separately in Section~\ref{sec:evaluation} because it is
 a result about how this generator encodes signal, not a detail of one table.
