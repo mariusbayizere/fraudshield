@@ -129,9 +129,28 @@ ADR and migration directories of every remote branch.
 |---|---|---|
 | ADR | `0110`–`0119` (`0080`–`0089` are M8's, `0090`–`0099` M9's, `0100`–`0109` M10's) | `0110` (P1's contract changes), `0111` (held payments wait for the arbiter), `0112` (how P1 serves the reads) |
 | Flyway | `V80`–`V89` (`V60`–`V69` are M6's, `V70`–`V79` M7's) | `V80` (P1: SHAP base value and margin, counterparty index); planned `V81` (decision-commit contract, renumbered from V80) and `V82` (configuration contract, renumbered from V81), because P1 merges first (ADR 0112) |
-| Backlog | `PB-151` to `PB-170` (`PB-131`–`PB-140` are M8's, `PB-141`–`PB-150` M11's) | `PB-151` to `PB-159` |
+| Backlog | `PB-151` to `PB-170` (`PB-131`–`PB-140` are M8's, `PB-141`–`PB-150` M11's) | `PB-151` to `PB-159`; `PB-170` filed by M12 on `m12/audit` for the decision below (2026-10-25), taken from the top of the range because `m8b/analyst-api` uses it upward (to `PB-161` there) |
 
 The scope and the owner's answers are in `M8B_scope.md`.
+
+## The operator identity is not acceptable evidence (owner decision, 2026-10-25; PB-170)
+
+On `m8b/analyst-api` this file flags to M12 that the decision-owner contract's operator exits,
+`resolve_contested_decision` and `release_failed_claim`
+(`docs/architecture/decision-owner-contract.md` §7.2; the contract and both functions are on that
+branch, not yet on `main`), take the acting risk officer's `staff_user_id` from their caller and cannot authenticate it;
+each resolution records the asserted officer with the database login beside it, and asks M12 whether
+that is acceptable evidence.
+
+**The owner's decision (2026-10-25):** "not acceptable as evidence. A staff_user_id the function records but cannot authenticate is an unauthenticated claim in an audit trail — the same shape as every guard-with-two-doors in the notebook". The owner directed that it be filed against M8B
+rather than M12: PB-170.
+
+**Notes by M12, not the owner's words.** The functions do check the asserted officer: a shared check
+refuses a `staff_user_id` that is not an active risk officer (`V81__decision_owner.sql`,
+`resolution_actor()`, on `m8b/analyst-api`), and only `fs_operator` may call them. What nothing checks
+is that the caller is that officer. The remedy the flag names is an authenticated operator endpoint,
+a change to the frozen contract, so a reviewed proposal comes before any code. Recorded in
+`docs/FINAL_REPORT.md` (M8B).
 
 ## For M8: the console's half of the CSRF pin (ADR 0110 point 1)
 

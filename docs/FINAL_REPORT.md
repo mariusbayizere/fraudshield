@@ -111,7 +111,7 @@ No milestone from M8 on has met its gate.
 - **GOV-9, branch protection on `main`,** records that "the owner reported the `protect-main` ruleset
   and `main` as default branch; not verifiable from the build session". Read from GitHub on
   2026-10-25: the default branch is `main`; no ruleset exists; and `main` had no branch protection
-  until this audit applied it (section 4). No repository record says when the default branch changed.
+  until this audit applied it (section 5). No repository record says when the default branch changed.
 
 ### M1 — Contracts and data model
 
@@ -374,9 +374,16 @@ decision-owner contract's operator exits, `resolve_contested_decision` and `rele
 take the acting risk officer's `staff_user_id` from their caller "and cannot authenticate it". The
 database login is recorded beside it. "The officer named on a resolution has not been shown to be
 the person who acted"; accountability rests on M9's runbook giving each operator an individual
-login. The record asks M12 to decide whether that is acceptable evidence; if not, the remedy is an
-authenticated operator endpoint, a frozen-contract change (branch `docs/parallel/M8B_updates.md:153-174`).
-**Not decided:** this audit has not made that decision; it is recorded as open.
+login. The record asked M12 to decide whether that is acceptable evidence (branch
+`docs/parallel/M8B_updates.md:153-174`).
+
+**Decided by the owner, 2026-10-25:** "not acceptable as evidence. A staff_user_id the function records but cannot authenticate is an unauthenticated claim in an audit trail — the same shape as every guard-with-two-doors in the notebook". Filed against M8B, not M12, as PB-170.
+
+*M12's notes, not the owner's words.* The functions do check the asserted officer: a shared check
+refuses a `staff_user_id` that is not an active risk officer (branch `m8b/analyst-api`,
+`V81__decision_owner.sql`, `resolution_actor()`), and only the `fs_operator` role may call them. What
+nothing checks is that the caller is that officer. The guard-with-two-doors entries begin at
+`docs/research/lab_notebook.md:109`.
 
 **Register.** FR-06-06 and NFR-SEC-03 are IN_PROGRESS under M8B.
 
@@ -511,17 +518,31 @@ audit cannot catch its own pattern errors"; and `contributions.md`, the one pape
 - the full-system Principal Review from a fresh clone (Part I.4), and its record
   `docs/reviews/FINAL_SYSTEM_REVIEW.md`;
 - this report, reviewed and accepted by the owner;
-- the decision M8B flagged to M12 (the unauthenticated operator identity, above);
 - the `m12-complete` and `v1.0.0` tags, the release notes and the `CHANGELOG.md` update.
 
-## 3. Records that disagree with the repository
+## 3. What v1.0.0 needs, in order
+
+The chain from the state above to a release, in the order the owner set out on 2026-10-25. No dates
+and no estimates.
+
+1. **M8B P3 to P8.** None is built, apart from `getDeploymentEnvironment`. *Added by M12:* P2 is built
+   but not on `main` either (`m8b/analyst-api`), and PB-170 is M8B's.
+2. **M8's console on `main`.**
+3. **The chaos and journey harnesses proved able to fail** (M10's step 2). *Added by M12:* the chaos
+   harness needs a cluster with the manifests applied, the data-store manifests and Chaos Mesh, none of
+   which exists (M9). Step 2 also has open items besides these two harnesses (PB-197, PB-198, PB-199).
+4. **The 24 measured rows,** with each row's needs (section 2, M10), among them the dedicated
+   benchmark machine of `m10_machine_spec.md`, which is not provisioned.
+5. **A fresh-clone Principal Review** (Part I.4), recorded in `docs/reviews/FINAL_SYSTEM_REVIEW.md`.
+
+## 4. Records that disagree with the repository
 
 These were found while auditing. None is corrected on this branch.
 - `docs/walkthrough/SESSION_STATE.md:68-69`, GOV-5 (`docs/backlog/governance.md:46`) and
   `docs/parallel/M9_updates.md:77` say or assume the default branch is `m0/bootstrap`; GitHub reports
   `main` (2026-10-25).
 - GOV-9 is open, and records an owner-reported `protect-main` ruleset that does not exist (GitHub,
-  2026-10-25). Branch protection now applies (section 4); the item has not been updated.
+  2026-10-25). Branch protection now applies (section 5); the item has not been updated.
 - `docs/parallel/M7_updates.md:406` says M7 is unmerged and untagged; it is both.
 - `docs/benchmarks/m10_plan.md` §1 says `main` carries M0–M5 only.
 - The register on `main` carries none of M8's branch progress.
@@ -534,7 +555,7 @@ These were found while auditing. None is corrected on this branch.
 - The repository README points to "the paper's disclosure section" (`README.md:15`), which
   `m11/paper` no longer has.
 
-## 4. Repository state (2026-10-25, read from GitHub)
+## 5. Repository state (2026-10-25, read from GitHub)
 
 - **Default branch:** `main`.
 - **Branch protection on `main`:** applied by this audit on 2026-10-25 (observed in this session;
