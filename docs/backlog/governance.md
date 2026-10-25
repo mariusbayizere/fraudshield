@@ -72,7 +72,10 @@ Format: ID · title · source · priority · due · description · acceptance.
 - **Acceptance:** compose and Kubernetes images are pinned by digest, with an update process.
 
 ### GOV-9 · Branch protection on `main`
-- **Source:** G.2; `gh` not authenticated on the build machine · **Priority:** high · **Due:** owner action, open at the M1 close (the owner reported the `protect-main` ruleset and `main` as default branch; not verifiable from the build session until `gh` is authenticated there)
+- **Source:** G.2; `gh` not authenticated on the build machine · **Priority:** high · **Due:** owner action, open at the M1 close
+- **Correction (2026-10-25).** This entry used to record that "the owner reported the `protect-main` ruleset and `main` as default branch". The ruleset was not there. When `gh` could first check, on 2026-10-24, `main` had no branch protection ("Branch not protected", HTTP 404) and the repository had no ruleset; nothing in the repository shows that either existed before. **`main` had no protection until 2026-10-25.** For every day before that, this entry claimed a control that was not in place.
+- **From 2026-10-25** (applied for the M12 audit; `docs/FINAL_REPORT.md`, "Repository state"): `main` is the default branch and has branch protection, not a ruleset. Before a commit can reach `main`, the seven `ci` jobs must pass on it (python, java, frontend, pre-commit, gitleaks, licence inventory, traceability) and the branch must be up to date. Administrators are included. Force-pushes and deletion are refused. Pull-request reviews and linear history are not required: `main` moves by fast-forward, and a merge of `m11/paper` needs a merge commit. As first applied, it also required the path-filtered `infrastructure` job, which would have refused every commit outside its paths; that was removed the same day, before anything was merged.
+- **Not yet met:** `stack` is not a required check. Its workflow runs on every push and skips its build job when its inputs are unchanged; GitHub counts a skipped required job as passed, so requiring it would not block other commits. Adding it is the owner's call.
 - **Acceptance:** `main` is the default branch and requires the `ci` jobs (and `stack` when it runs).
 
 ### GOV-10 · Gate evidence must quote job results, not run conclusions

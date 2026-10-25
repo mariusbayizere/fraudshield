@@ -108,8 +108,9 @@ No milestone from M8 on has met its gate.
 - Governance items in `docs/backlog/governance.md` with no closure: GOV-1 (`:13`), GOV-2 (`:22`),
   GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`), GOV-9 (`:74-76`),
   GOV-11 (`:89`), GOV-12 (`:96`), GOV-14 (`:106`) and GOV-15 (`:113`).
-- **GOV-9, branch protection on `main`,** records that "the owner reported the `protect-main` ruleset
-  and `main` as default branch; not verifiable from the build session". Read from GitHub on
+- **GOV-9, branch protection on `main`,** recorded until 2026-10-25 that "the owner reported the
+  `protect-main` ruleset and `main` as default branch; not verifiable from the build session". It was
+  corrected on 2026-10-25: no protection and no ruleset existed until then. Read from GitHub on
   2026-10-25: the default branch is `main`; no ruleset exists; and `main` had no branch protection
   until this audit applied it (section 5). No repository record says when the default branch changed.
 
@@ -537,12 +538,13 @@ and no estimates.
 
 ## 4. Records that disagree with the repository
 
-These were found while auditing. None is corrected on this branch.
+These were found while auditing. Only GOV-9 has since been corrected.
 - `docs/walkthrough/SESSION_STATE.md:68-69`, GOV-5 (`docs/backlog/governance.md:46`) and
   `docs/parallel/M9_updates.md:77` say or assume the default branch is `m0/bootstrap`; GitHub reports
   `main` (2026-10-25).
-- GOV-9 is open, and records an owner-reported `protect-main` ruleset that does not exist (GitHub,
-  2026-10-25). Branch protection now applies (section 5); the item has not been updated.
+- GOV-9 recorded an owner-reported `protect-main` ruleset that did not exist (GitHub, 2026-10-25).
+  *Corrected 2026-10-25:* GOV-9 now records that `main` had no protection until 2026-10-25, and what
+  protection covers from that date (section 5). It stays open: `stack` is not yet required.
 - `docs/parallel/M7_updates.md:406` says M7 is unmerged and untagged; it is both.
 - `docs/benchmarks/m10_plan.md` §1 says `main` carries M0–M5 only.
 - The register on `main` carries none of M8's branch progress.
