@@ -70,7 +70,7 @@ row is recorded as checked by an independent person.
 
 | Milestone | On `main` | Tag | Register rows (status) | The gap that matters most |
 |---|---|---|---|---|
-| M0 bootstrap | yes | `m0-complete` | 2 DONE | The stack has never run on the reference laptop (owner decision); eleven governance items carry no closure |
+| M0 bootstrap | yes | `m0-complete` | 2 DONE | The stack has never run on the reference laptop (owner decision); ten governance items carry no closure |
 | M1 contracts, data model | yes | `m1-complete` | 3 DONE, 1 DONE_WITH_DEVIATION | Four Must rows could not be met and were re-planned (ADR 0021) |
 | M2 dataset | yes | `m2-complete` | 8 DONE, 2 VERIFIED_AT_REDUCED_SCALE, 1 REQUIRES_EXTERNAL_PARTY | 5M-row gate not met (about 1M rows); dataset not published; the tag's commit fails CI |
 | M3 features | yes | `m3-complete` | 2 DONE, 1 DONE_WITH_DEVIATION | Exit criterion E3 not met (five engineered features above 0.80 AUC); the all-channels feature test claimed did not exist |
@@ -106,7 +106,7 @@ No milestone from M8 on has met its gate.
 - "The stack has never run on the reference laptop (owner decision)" (`milestone-review.md:197`).
 - SeaweedFS replaces MinIO, a recorded deviation (ADR 0005).
 - Governance items in `docs/backlog/governance.md` with no closure: GOV-1 (`:13`), GOV-2 (`:22`),
-  GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`), GOV-9 (`:74-76`; corrected at `0292878`, narrowed at `19964fb`, closed as met on 2026-10-25),
+  GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`),
   GOV-11 (`:89`), GOV-12 (`:96`), GOV-14 (`:106`) and GOV-15 (`:113`).
 - **GOV-9, branch protection on `main`,** recorded until 2026-10-25 that "the owner reported the
   `protect-main` ruleset and `main` as default branch; not verifiable from the build session". It was
@@ -114,6 +114,8 @@ No milestone from M8 on has met its gate.
   and nothing records either before. Read from GitHub on
   2026-10-25: the default branch is `main`; no ruleset exists; and `main` had no branch protection
   (since at least 2026-10-24) until this audit applied it (section 5). No repository record says when the default branch changed.
+  GOV-9 was corrected (`0292878`, narrowed at `19964fb`) and closed as met on 2026-10-25, once
+  `stack`'s gate job became a required check (`docs/backlog/governance.md:74-79`).
 
 ### M1 — Contracts and data model
 
@@ -564,7 +566,8 @@ These were found while auditing. Only GOV-9 has since been corrected (and closed
 - **Default branch:** `main`.
 - **Branch protection on `main`:** applied by this audit on 2026-10-25 (observed in this session;
   GitHub records no date). The seven `ci` jobs, which run on every push, and, from later the same
-  day, `stack`'s gate job (skipped, and so passed, when the stack's inputs are unchanged) must pass on
+  day, `stack`'s gate job (skipped, and so passed, when a branch push leaves the stack's inputs unchanged
+  since that branch's previous push; the build on `main` after a fast-forward gates nothing) must pass on
   the commit, and the branch must be up to date; administrators are
   included; force-pushes and deletion are refused. Pull-request reviews and linear history are not
   required: `main` moves by fast-forward, and merging `m11/paper` needs a merge commit. As first
