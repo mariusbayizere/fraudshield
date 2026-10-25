@@ -106,14 +106,14 @@ No milestone from M8 on has met its gate.
 - "The stack has never run on the reference laptop (owner decision)" (`milestone-review.md:197`).
 - SeaweedFS replaces MinIO, a recorded deviation (ADR 0005).
 - Governance items in `docs/backlog/governance.md` with no closure: GOV-1 (`:13`), GOV-2 (`:22`),
-  GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`), GOV-9 (`:74-76`; corrected at `0292878`),
+  GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`), GOV-9 (`:74-76`; corrected at `0292878`, narrowed at `19964fb`),
   GOV-11 (`:89`), GOV-12 (`:96`), GOV-14 (`:106`) and GOV-15 (`:113`).
 - **GOV-9, branch protection on `main`,** recorded until 2026-10-25 that "the owner reported the
   `protect-main` ruleset and `main` as default branch; not verifiable from the build session". It was
   corrected on 2026-10-25: when first checked, on 2026-10-24, there was no protection and no ruleset,
   and nothing records either before. Read from GitHub on
   2026-10-25: the default branch is `main`; no ruleset exists; and `main` had no branch protection
-  until this audit applied it (section 5). No repository record says when the default branch changed.
+  (since at least 2026-10-24) until this audit applied it (section 5). No repository record says when the default branch changed.
 
 ### M1 — Contracts and data model
 
@@ -484,7 +484,7 @@ owner asked for step 2 on `main` before M8B was there.
 
 ### M11 — Research artifacts
 
-**Not merged.** The paper is on `m11/paper` (97 ahead of `main`, 153 behind, tip `5361d1c` when audited; `4df6113` since adds only the outstanding-tag note). `main`
+**Not merged.** The paper is on `m11/paper` (97 ahead of `main`, 153 behind, tip `5361d1c` when audited; later commits add only the outstanding-tag note). `main`
 holds only `docs/research/paper/contributions.md` and an older `docs/parallel/M11_updates.md` (314
 lines; the branch's is 526).
 
@@ -500,7 +500,8 @@ audit cannot catch its own pattern errors"; and `contributions.md`, the one pape
 **Unmet or open.**
 - **The paper is not on `main`.** Merging it brings 97 commits that also change workflows, the
   dataset generator, ADRs 0028, 0031 and 0084, the README and the backlog.
-- **No submission is recorded.** No arXiv ID, date or submitted commit is in the repository.
+- **No arXiv ID, date or submitted commit is recorded.** The owner reports the paper submitted
+  (branch `docs/parallel/M11_updates.md` §18).
 - **The disclosure was removed.** On 2026-10-19 the owner kept the disclosure "unchanged … including
   that the work has had no independent human review" (branch `docs/research/paper/REVIEW.md:41`). On
   2026-10-24 it was removed whole (`5ce9965`), and the remaining mentions of AI agents with it
