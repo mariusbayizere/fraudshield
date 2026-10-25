@@ -106,7 +106,7 @@ No milestone from M8 on has met its gate.
 - "The stack has never run on the reference laptop (owner decision)" (`milestone-review.md:197`).
 - SeaweedFS replaces MinIO, a recorded deviation (ADR 0005).
 - Governance items in `docs/backlog/governance.md` with no closure: GOV-1 (`:13`), GOV-2 (`:22`),
-  GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`), GOV-9 (`:74-76`; corrected at `0292878`, narrowed at `19964fb`),
+  GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`), GOV-9 (`:74-76`; corrected at `0292878`, narrowed at `19964fb`, closed as met on 2026-10-25),
   GOV-11 (`:89`), GOV-12 (`:96`), GOV-14 (`:106`) and GOV-15 (`:113`).
 - **GOV-9, branch protection on `main`,** recorded until 2026-10-25 that "the owner reported the
   `protect-main` ruleset and `main` as default branch; not verifiable from the build session". It was
@@ -540,13 +540,13 @@ and no estimates.
 
 ## 4. Records that disagree with the repository
 
-These were found while auditing. Only GOV-9 has since been corrected.
+These were found while auditing. Only GOV-9 has since been corrected (and closed).
 - `docs/walkthrough/SESSION_STATE.md:68-69`, GOV-5 (`docs/backlog/governance.md:46`) and
   `docs/parallel/M9_updates.md:77` say or assume the default branch is `m0/bootstrap`; GitHub reports
   `main` (2026-10-25).
 - GOV-9 recorded an owner-reported `protect-main` ruleset that was absent when first checked
   (2026-10-24). *Corrected 2026-10-25:* GOV-9 now records that no protection was in place from that
-  check until 2026-10-25, and what protection covers from that date (section 5). It stays open: `stack` is not yet required.
+  check until 2026-10-25, and what protection covers from that date (section 5). It was closed as met the same day, once `stack`'s gate job became a required check.
 - `docs/parallel/M7_updates.md:406` says M7 is unmerged and untagged; it is both.
 - `docs/benchmarks/m10_plan.md` §1 says `main` carries M0–M5 only.
 - The register on `main` carries none of M8's branch progress.
@@ -563,8 +563,9 @@ These were found while auditing. Only GOV-9 has since been corrected.
 
 - **Default branch:** `main`.
 - **Branch protection on `main`:** applied by this audit on 2026-10-25 (observed in this session;
-  GitHub records no date). The seven `ci` jobs, which
-  run on every push, must pass on the commit, and the branch must be up to date; administrators are
+  GitHub records no date). The seven `ci` jobs, which run on every push, and, from later the same
+  day, `stack`'s gate job (skipped, and so passed, when the stack's inputs are unchanged) must pass on
+  the commit, and the branch must be up to date; administrators are
   included; force-pushes and deletion are refused. Pull-request reviews and linear history are not
   required: `main` moves by fast-forward, and merging `m11/paper` needs a merge commit. As first
   applied, it also required the `infrastructure` job, which runs only when certain paths change and so
