@@ -106,11 +106,12 @@ No milestone from M8 on has met its gate.
 - "The stack has never run on the reference laptop (owner decision)" (`milestone-review.md:197`).
 - SeaweedFS replaces MinIO, a recorded deviation (ADR 0005).
 - Governance items in `docs/backlog/governance.md` with no closure: GOV-1 (`:13`), GOV-2 (`:22`),
-  GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`), GOV-9 (`:74-76`),
+  GOV-3 (`:33`), GOV-4 (`:38`), GOV-5's default-branch half (`:46`), GOV-8 (`:71`), GOV-9 (`:74-76`; corrected at `0292878`),
   GOV-11 (`:89`), GOV-12 (`:96`), GOV-14 (`:106`) and GOV-15 (`:113`).
 - **GOV-9, branch protection on `main`,** recorded until 2026-10-25 that "the owner reported the
   `protect-main` ruleset and `main` as default branch; not verifiable from the build session". It was
-  corrected on 2026-10-25: no protection and no ruleset existed until then. Read from GitHub on
+  corrected on 2026-10-25: when first checked, on 2026-10-24, there was no protection and no ruleset,
+  and nothing records either before. Read from GitHub on
   2026-10-25: the default branch is `main`; no ruleset exists; and `main` had no branch protection
   until this audit applied it (section 5). No repository record says when the default branch changed.
 
@@ -483,7 +484,7 @@ owner asked for step 2 on `main` before M8B was there.
 
 ### M11 — Research artifacts
 
-**Not merged.** The paper is on `m11/paper` (97 ahead of `main`, 153 behind, tip `5361d1c`). `main`
+**Not merged.** The paper is on `m11/paper` (97 ahead of `main`, 153 behind, tip `5361d1c` when audited; `4df6113` since adds only the outstanding-tag note). `main`
 holds only `docs/research/paper/contributions.md` and an older `docs/parallel/M11_updates.md` (314
 lines; the branch's is 526).
 
@@ -542,9 +543,9 @@ These were found while auditing. Only GOV-9 has since been corrected.
 - `docs/walkthrough/SESSION_STATE.md:68-69`, GOV-5 (`docs/backlog/governance.md:46`) and
   `docs/parallel/M9_updates.md:77` say or assume the default branch is `m0/bootstrap`; GitHub reports
   `main` (2026-10-25).
-- GOV-9 recorded an owner-reported `protect-main` ruleset that did not exist (GitHub, 2026-10-25).
-  *Corrected 2026-10-25:* GOV-9 now records that `main` had no protection until 2026-10-25, and what
-  protection covers from that date (section 5). It stays open: `stack` is not yet required.
+- GOV-9 recorded an owner-reported `protect-main` ruleset that was absent when first checked
+  (2026-10-24). *Corrected 2026-10-25:* GOV-9 now records that no protection was in place from that
+  check until 2026-10-25, and what protection covers from that date (section 5). It stays open: `stack` is not yet required.
 - `docs/parallel/M7_updates.md:406` says M7 is unmerged and untagged; it is both.
 - `docs/benchmarks/m10_plan.md` §1 says `main` carries M0–M5 only.
 - The register on `main` carries none of M8's branch progress.
@@ -566,7 +567,7 @@ These were found while auditing. Only GOV-9 has since been corrected.
   included; force-pushes and deletion are refused. Pull-request reviews and linear history are not
   required: `main` moves by fast-forward, and merging `m11/paper` needs a merge commit. As first
   applied, it also required the `infrastructure` job, which runs only when certain paths change and so
-  would have refused every other commit; that was removed the same day, before anything was merged.
+  would have refused every other commit on the fast-forward route; that was removed the same day, before anything was merged.
 - **Pull requests:** #1, #2 and #3 (all against `m0/bootstrap`, opened 2026-09-22) closed without
   merging on 2026-10-25; every commit on their heads is on `main`. #4 (`m6/housekeeping`) was merged
   on 2026-10-17. No PR is open.
