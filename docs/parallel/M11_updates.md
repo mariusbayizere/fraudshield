@@ -530,11 +530,13 @@ the sweep found two genuine majors per round, each in a new place, and nothing f
 **Open until done.** The owner reports the paper submitted to arXiv. The `paper/v1` tag waits for
 two things the owner will supply: the arXiv ID and the SHA-256 of the file actually uploaded. Then:
 
-- match the SHA-256 against the packages built from this branch (`88f32d2`: tarball `6d45290b…`;
-  `5361d1c`: tarball `a7a3da4a…`, zip `91b59802…`), and tag the commit it matches, not one assumed;
+- match the SHA-256 against the packages built from this branch, and tag the commit it matches, not
+  one assumed. The packages were built outside the repository (not committed); their hashes are in
+  the `SHA256SUMS` beside each, as reported to the owner: `88f32d2`, tarball `6d45290b…`; `5361d1c`,
+  tarball `a7a3da4a…` and zip `91b59802…`;
 - if it matches none, tag nothing and report it;
 - record the arXiv ID, the submission date, the commit and the SHA-256 in this file and in
   `docs/research/paper/README.md`, and carry the same in the tag's message.
 
-No submission, arXiv ID or submitted commit is recorded in the repository until then
+Until then the repository records no arXiv ID, submission date or submitted commit
 (`docs/FINAL_REPORT.md`, M11).
