@@ -524,3 +524,17 @@ the sweep found two genuine majors per round, each in a new place, and nothing f
   (identical values). A check that flags identical values across a keyed family would catch it.
 - **The full-volume gate run names its feature cache only by path**; the paper says so. Runs from
   `8d6a16f` on name their inputs by hash (`fs-evidence --input`).
+
+## 18. Outstanding: tag the submitted paper (owner, 2026-10-25)
+
+**Open until done.** The owner reports the paper submitted to arXiv. The `paper/v1` tag waits for
+two things the owner will supply: the arXiv ID and the SHA-256 of the file actually uploaded. Then:
+
+- match the SHA-256 against the packages built from this branch (`88f32d2`: tarball `6d45290b…`;
+  `5361d1c`: tarball `a7a3da4a…`, zip `91b59802…`), and tag the commit it matches, not one assumed;
+- if it matches none, tag nothing and report it;
+- record the arXiv ID, the submission date, the commit and the SHA-256 in this file and in
+  `docs/research/paper/README.md`, and carry the same in the tag's message.
+
+No submission, arXiv ID or submitted commit is recorded in the repository until then
+(`docs/FINAL_REPORT.md`, M11).
